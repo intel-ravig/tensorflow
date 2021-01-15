@@ -76,16 +76,34 @@ bool SubGraphMatcher<MatchingDirection::kFollowInputs>::DoesOpTypePatternMatch(
   if (!pattern.children.empty()) {
     // Currently only direction toward inputs is implemented.
     auto node_view_children = node_view->GetRegularFanins();
-    if (node_view_children.size() != pattern.children.size()) {
+    int num_children = node_view_children.size();
+    if (num_children != pattern.children.size()) {
       return false;
     } else {
-      for (int i = 0; i < pattern.children.size(); ++i) {
+      std::vector<int> pattern_child_indices(num_children);
+      std::iota(pattern_child_indices.begin(), pattern_child_indices.end(), 0);
+      // Commutative binary op like Add and Mul can have their inputs in any
+      // order. To match such commutative property, look ahead desired branch
+      // for DFS traversal in pattern syntax by permuting child_indices.
+      string op_name = pattern.op;
+      if ((op_name == "Add" || op_name == "AddV2" || op_name == "Mul") &&
+          num_children == 2) {
+        MutableNodeView* child0_node_view =
+            graph_view_->GetNode(node_view_children[0].node_index());
+        MutableNodeView* child1_node_view =
+            graph_view_->GetNode(node_view_children[1].node_index());
+        if (pattern.children[1].op == child0_node_view->GetOp() ||
+            pattern.children[0].op == child1_node_view->GetOp())
+          std::swap(pattern_child_indices[0], pattern_child_indices[1]);
+      }
+      for (int i = 0; i < num_children; ++i) {
         auto child_node_index = node_view_children[i].node_index();
         // TODO (mdfaijul): Is it guaranted that GetNode will reuturn non null
         // pointer.
         MutableNodeView* child_node_view =
             graph_view_->GetNode(child_node_index);
-        const OpTypePattern& child_pattern = pattern.children[i];
+        const OpTypePattern& child_pattern =
+            pattern.children[pattern_child_indices[i]];
         match->children.push_back(NodeViewMatch());
         NodeViewMatch* child_match = &(match->children.back());
         if (!DoesOpTypePatternMatch(child_pattern, child_node_view,
@@ -109,18 +127,20 @@ bool SubGraphMatcher<MatchingDirection::kFollowInputs>::GetMatchedNodes(
   if (DoesOpTypePatternMatch(pattern, node_view, match_.get())) {
     if (!HasRemoveNodeExternalDependents()) {
       found_match = true;
-      matched_nodes_map->swap(this->node_label_to_index_);
-      remove_node_indices->swap(this->remove_node_indices_);
+      *matched_nodes_map = this->node_label_to_index_;
+      *remove_node_indices = this->remove_node_indices_;
     }
   } else {
     found_match = false;
-    // Clear all bookkeeping data
-    match_->Clear();
-    match_.reset(nullptr);
-    node_label_to_index_.clear();
-    matched_node_indices_.clear();
-    remove_node_indices_.clear();
   }
+
+  // Clear all bookkeeping data
+  match_->Clear();
+  match_.reset(nullptr);
+  matched_node_indices_.clear();
+  node_label_to_index_.clear();
+  remove_node_indices_.clear();
+
   return found_match;
 }
 

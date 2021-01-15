@@ -1003,5 +1003,125 @@ TEST_F(RemapperTest, FuseConv2DWithSqueezeAndBias) {
   test::ExpectTensorNear<float>(tensors[0], tensors_expected[0], 1e-6);
 }
 
+class FusedMatMulBiasAddAndGeluTest : public RemapperTest {
+ protected:
+  Output GetErf(tensorflow::Scope& s, Output x, bool approximate = false) {
+    if (!approximate) {
+      auto square_root_one_half =
+          ops::Const(s.WithOpName("square_root_one_half"), {0.707106f}, {});
+      auto x_times_square_root_one_half =
+          ops::Mul(s.WithOpName("x_times_square_root_one_half"), x,
+                   square_root_one_half);
+      auto y = ops::Erf(s.WithOpName("erf"), x_times_square_root_one_half);
+      return y;
+    } else {
+      auto three = ops::Const(s.WithOpName("three"), {3.0f}, {});
+      auto square_root_two_over_pi =
+          ops::Const(s.WithOpName("square_root_two_over_pi"), {0.797884f}, {});
+      auto empirical_const =
+          ops::Const(s.WithOpName("empirical_const"), {0.044715f}, {});
+      auto x_cube = ops::Pow(s.WithOpName("x_cube"), x, three);
+      auto empirical_const_times_x_cube =
+          ops::Mul(s.WithOpName("empirical_const_times_x_cube"),
+                   empirical_const, x_cube);
+      auto temp =
+          ops::AddV2(s.WithOpName("temp"), x, empirical_const_times_x_cube);
+      auto temp_times_square_root_two_over_pi =
+          ops::Mul(s.WithOpName("temp_times_square_root_two_over_pi"), temp,
+                   square_root_two_over_pi);
+      auto y =
+          ops::Tanh(s.WithOpName("erf"), temp_times_square_root_two_over_pi);
+      return y;
+    }
+  }
+
+ public:
+  template <DataType DTYPE, bool approximate = false>
+  void RunTest() {
+    using ::tensorflow::ops::Placeholder;
+
+    tensorflow::Scope s = tensorflow::Scope::NewRootScope();
+
+    auto lhs_shape = ops::Placeholder::Shape({8, 32});
+    auto rhs_shape = ops::Placeholder::Shape({32, 64});
+    auto bias_shape = ops::Placeholder::Shape({64});
+
+    auto lhs = Placeholder(s.WithOpName("lhs"), DTYPE, lhs_shape);
+    auto rhs = Placeholder(s.WithOpName("rhs"), DTYPE, rhs_shape);
+    auto bias = Placeholder(s.WithOpName("bias"), DTYPE, bias_shape);
+
+    auto matmul = ops::MatMul(s.WithOpName("matmul"), lhs, rhs);
+    auto bias_add = ops::BiasAdd(s.WithOpName("bias_add"), matmul, bias);
+
+    // Add Gelu with smaller ops
+    auto one_half = ops::Const(s.WithOpName("one_half"), {0.5f}, {});
+    auto bias_add_times_one_half =
+        ops::Mul(s.WithOpName("bias_add_times_one_half"), bias_add, one_half);
+    auto one = ops::Const(s.WithOpName("one"), {1.0f}, {});
+    auto erf = GetErf(s, bias_add, approximate);
+    auto erf_plus_one = ops::AddV2(s.WithOpName("one_plus_erf"), erf, one);
+    auto gelu =
+        ops::Mul(s.WithOpName("gelu"), bias_add_times_one_half, erf_plus_one);
+    auto fetch = ops::Identity(s.WithOpName("fetch"), gelu);
+
+    auto lhs_t = GenerateTensorWithSetRandom<DTYPE>({8, 32});
+    auto rhs_t = GenerateTensorWithSetRandom<DTYPE>({32, 64});
+    auto bias_t = GenerateTensorWithSetRandom<DTYPE>({64});
+
+    GrapplerItem item;
+    item.fetch = {"fetch"};
+    item.feed = {{"lhs", lhs_t}, {"rhs", rhs_t}, {"bias", bias_t}};
+    TF_ASSERT_OK(s.ToGraphDef(&item.graph));
+
+    // Place all nodes on CPU.
+    for (int i = 0; i < item.graph.node_size(); ++i) {
+      item.graph.mutable_node(i)->set_device("/device:CPU:0");
+    }
+
+    Remapper optimizer(RewriterConfig::ON);
+    GraphDef optimized_graph;
+    TF_ASSERT_OK(optimizer.Optimize(nullptr, item, &optimized_graph));
+    int found = 0;
+    for (const NodeDef& node : optimized_graph.node()) {
+      if (node.name() == "gelu") {
+        EXPECT_EQ(node.op(), "_FusedMatMul");
+        ASSERT_GE(node.input_size(), 3);
+        EXPECT_EQ(node.input(0), "lhs");
+        EXPECT_EQ(node.input(1), "rhs");
+        EXPECT_EQ(node.input(2), "bias");
+        EXPECT_EQ(node.attr().at("num_args").i(), 1);
+        const auto fused_ops = node.attr().at("fused_ops").list().s();
+        ASSERT_EQ(fused_ops.size(), 2);
+        EXPECT_EQ(fused_ops[0], "BiasAdd");
+        if (approximate)
+          EXPECT_EQ(fused_ops[1], "GeluApproximate");
+        else
+          EXPECT_EQ(fused_ops[1], "GeluExact");
+        found++;
+      }
+    }
+    EXPECT_EQ(1, found);
+
+    // Evaluate result without remapper fusion
+    auto tensors_expected = EvaluateNodes(item.graph, item.fetch, item.feed);
+    ASSERT_EQ(tensors_expected.size(), 1);
+
+    auto tensors_evaluated =
+        EvaluateNodes(optimized_graph, item.fetch, item.feed);
+    ASSERT_EQ(tensors_evaluated.size(), 1);
+    test::ExpectClose(tensors_evaluated[0], tensors_expected[0], 1e-6);
+  }
+};
+
+TEST_F(FusedMatMulBiasAddAndGeluTest, Float32GeluExact) {
+  RunTest<DT_FLOAT, false>();
+}
+
+TEST_F(FusedMatMulBiasAddAndGeluTest, Float32GeluApproximate) {
+  RunTest<DT_FLOAT, true>();
+}
+
+#endif  // INTEL_MKL
+
 }  // namespace grappler
 }  // namespace tensorflow
