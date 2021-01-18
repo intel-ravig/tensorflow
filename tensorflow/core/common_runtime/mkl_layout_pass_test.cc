@@ -5188,6 +5188,42 @@ static void BM_MklLayoutRewritePass(int iters, int op_nodes) {
                  // not whole graphs
   }
 }
+
+TEST_F(MklLayoutPassTest, QuantizedFusedMatMul) {
+  InitGraph(
+      "node { name: 'A' op: 'QInt8Input' }"
+      "node { name: 'B' op: 'QInt8Input' }"
+      "node { name: 'C' op: 'Float32Input' }"
+      "node { name: 'D' op: 'Float32Input' }"
+      "node { name: 'E' op: 'Float32Input' }"
+      "node { name: 'F' op: 'Float32Input' }"
+      "node { name: 'G' op: 'Float32Input' }"
+      "node { name: 'H' op: '_QuantizedFusedMatMul'"
+      " attr { key: 'T1'                value { type: DT_QINT8 } }"
+      " attr { key: 'T2'                value { type: DT_QINT8 } }"
+      " attr { key: 'Targs'             value { type: DT_FLOAT } }"
+      " attr { key: 'Toutput'           value { type: DT_QINT32 } }"
+      " attr { key: 'T'                 value { type: DT_QINT32 } }"
+      " attr { key: 'num_args'          value { i: 1 } }"
+      " attr { key: 'transpose_a'       value { b: false } }"
+      " attr { key: 'transpose_b'       value { b: false } }"
+      " attr { key: 'fused_ops'         value { list: {s: 'BiasAdd'} } }"
+      " attr { key: 'is_filter_const'   value { b: true } }"
+      " attr { key: 'is_bias_const'     value { b: true } }"
+      " input: ['A', 'B', 'C', 'D', 'E', 'F', 'G']}");
+  EXPECT_EQ(DoMklLayoutOptimizationPass(),
+            "A(QInt8Input);B(QInt8Input);C(Float32Input);D(Float32Input);"
+            "DMT/_0(Const);DMT/_1(Const);DMT/_2(Const);DMT/_3(Const);"
+            "DMT/_4(Const);DMT/_5(Const);DMT/_6(Const);E(Float32Input);"
+            "F(Float32Input);G(Float32Input);H(_MklQuantizedFusedMatMul)|A->H;"
+            "A:control->DMT/_0:control;A:control->DMT/_1:control;"
+            "A:control->DMT/_2:control;A:control->DMT/_3:control;"
+            "A:control->DMT/_4:control;A:control->DMT/_5:control;"
+            "A:control->DMT/_6:control;B->H:1;C->H:2;D->H:3;DMT/_0->H:7;"
+            "DMT/_1->H:8;DMT/_2->H:9;DMT/_3->H:10;DMT/_4->H:11;DMT/_5->H:12;"
+            "DMT/_6->H:13;E->H:4;F->H:5;G->H:6");
+}
+
 BENCHMARK(BM_MklLayoutRewritePass)->Arg(1000)->Arg(10000);
 
 }  // namespace

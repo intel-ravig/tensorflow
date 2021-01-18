@@ -204,7 +204,7 @@ static inline bool IsMklLayoutDependentOp(const string& op_name, DataType T) {
 
   // Restrict quantized ops to QUINT8 and QINT8 for now
   if (kernel.find(kMklQuantizedOpLabelPattern) != string::npos) {
-    return (T == DT_QUINT8 || T == DT_QINT8 || T == DT_QINT32);
+    return (T == DT_QUINT8 || T == DT_QINT8 || T == DT_QINT32 || T == DT_FLOAT);
   }
   // Restrict regular ops to FLOAT and BFLOAT16
   if (kernel.find(kMklLayoutDependentOpLabelPattern) != string::npos) {

@@ -73,8 +73,11 @@ tf_mkl_kernel_library(
         "mkl_matmul_op.cc",
         "mkl_matmul_op_fused.cc",
     ],
-    hdrs = ["mkl_matmul_ops_common.h"],
-    deps = MKL_DEPS,
+    hdrs = [
+        "mkl_matmul_ops_common.h",
+        "mkl_quantized_conv_ops.h",
+    ],
+    deps = ["//tensorflow/core/kernels:no_op"] + MKL_DEPS,
 )
 
 tf_cc_test_mkl(
@@ -114,6 +117,23 @@ tf_cc_test_mkl(
     linkstatic = 1,  # Fixes dyld error on MacOS.
     deps = [
         ":mkl_qmatmul_op",
+        "//tensorflow/core:array_ops_op_lib",
+        "//tensorflow/core:math_ops_op_lib",
+        "//tensorflow/core:nn_ops_op_lib",
+        "//tensorflow/core/framework:fake_input",
+        "//tensorflow/core/framework:tensor_testutil",
+        "//tensorflow/core/kernels:quantization_utils",
+        "//tensorflow/core/kernels:quantized_ops",
+    ] + MKL_TEST_DEPS,
+)
+
+tf_cc_test_mkl(
+    name = "mkl_quantized_fused_matmul_op_test",
+    size = "small",
+    srcs = ["mkl_quantized_fused_matmul_op_test.cc"],
+    linkstatic = 1,  # Fixes dyld error on MacOS.
+    deps = [
+        ":mkl_matmul_op",
         "//tensorflow/core:array_ops_op_lib",
         "//tensorflow/core:math_ops_op_lib",
         "//tensorflow/core:nn_ops_op_lib",

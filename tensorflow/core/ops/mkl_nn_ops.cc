@@ -2012,6 +2012,269 @@ REGISTER_OP("_MklLayerNorm")
     .Attr("epsilon: float = 0.001")
     .SetShapeFn(shape_inference::UnchangedShape);
 
+REGISTER_OP("_QuantizedFusedMatMul")
+    .Input("a: T1")
+    .Input("b: T2")
+    .Input("args: num_args * Targs")
+    .Input("min_a: float")
+    .Input("max_a: float")
+    .Input("min_b: float")
+    .Input("max_b: float")
+    .Output("product: Toutput")
+    .Output("min_product: float")
+    .Output("max_product: float")
+    .Attr("T1: quantizedtype")
+    .Attr("T2: quantizedtype")
+    .Attr("num_args: int >= 0")
+    .Attr("Targs: {float, quantizedtype}")
+    .Attr("Toutput: quantizedtype")
+    .Attr("transpose_a: bool = false")
+    .Attr("transpose_b: bool = false")
+    .Attr("fused_ops: list(string) = []")
+    .Attr("is_filter_const: bool = true")
+    .Attr("is_bias_const: bool = true")
+    // Attributes for the FusedBatchNorm ----------- //
+    .Attr("epsilon: float = 0.0001")
+    // Attributes for the LeakyRelu ----------------------------------------- //
+    .Attr("leakyrelu_alpha: float = 0.2")
+    .SetShapeFn([](InferenceContext* c) {
+      TF_RETURN_IF_ERROR(shape_inference::MatMulShape(c));
+      ShapeHandle unused;
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(2), 1, &unused));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(3), 0, &unused));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(4), 0, &unused));
+      TF_RETURN_IF_ERROR(c->WithRankAtMost(c->input(5), 1, &unused));
+      TF_RETURN_IF_ERROR(c->WithRankAtMost(c->input(6), 1, &unused));
+
+      c->set_output(1, c->Scalar());
+      c->set_output(2, c->Scalar());
+      return Status::OK();
+    });
+
+REGISTER_OP("_QuantizedFusedMatMulAndDequantize")
+    .Input("a: T1")
+    .Input("b: T2")
+    .Input("args: num_args * Targs")
+    .Input("min_a: float")
+    .Input("max_a: float")
+    .Input("min_b: float")
+    .Input("max_b: float")
+    .Output("product: Toutput")
+    .Attr("T1: quantizedtype")
+    .Attr("T2: quantizedtype")
+    .Attr("num_args: int >= 0")
+    .Attr("Targs: {float, quantizedtype}")
+    .Attr("Toutput: {float}")
+    .Attr("transpose_a: bool = false")
+    .Attr("transpose_b: bool = false")
+    .Attr("fused_ops: list(string) = []")
+    .Attr("is_filter_const: bool = true")
+    .Attr("is_bias_const: bool = true")
+    // Attributes for the FusedBatchNorm ----------- //
+    .Attr("epsilon: float = 0.0001")
+    // Attributes for the LeakyRelu ----------------------------------------- //
+    .Attr("leakyrelu_alpha: float = 0.2")
+    .SetShapeFn([](InferenceContext* c) {
+      TF_RETURN_IF_ERROR(shape_inference::MatMulShape(c));
+      ShapeHandle unused;
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(2), 1, &unused));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(3), 0, &unused));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(4), 0, &unused));
+      TF_RETURN_IF_ERROR(c->WithRankAtMost(c->input(5), 1, &unused));
+      TF_RETURN_IF_ERROR(c->WithRankAtMost(c->input(6), 1, &unused));
+
+      return Status::OK();
+    });
+
+REGISTER_OP("_QuantizedFusedMatMulAndRequantize")
+    .Input("a: T1")
+    .Input("b: T2")
+    .Input("args: num_args * Targs")
+    .Input("min_a: float")
+    .Input("max_a: float")
+    .Input("min_b: float")
+    .Input("max_b: float")
+    .Input("min_freezed_output: float")
+    .Input("max_freezed_output: float")
+    .Output("product: Toutput")
+    .Output("min_product: float")
+    .Output("max_product: float")
+    .Attr("T1: quantizedtype")
+    .Attr("T2: quantizedtype")
+    .Attr("num_args: int >= 0")
+    .Attr("Targs: {float, quantizedtype}")
+    .Attr("Toutput: quantizedtype")
+    .Attr("transpose_a: bool = false")
+    .Attr("transpose_b: bool = false")
+    .Attr("fused_ops: list(string) = []")
+    .Attr("is_filter_const: bool = true")
+    .Attr("is_bias_const: bool = true")
+    // Attributes for the FusedBatchNorm ----------- //
+    .Attr("epsilon: float = 0.0001")
+    // Attributes for the LeakyRelu ----------------------------------------- //
+    .Attr("leakyrelu_alpha: float = 0.2")
+    .SetShapeFn([](InferenceContext* c) {
+      TF_RETURN_IF_ERROR(shape_inference::MatMulShape(c));
+      ShapeHandle unused;
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(2), 1, &unused));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(3), 0, &unused));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(4), 0, &unused));
+      TF_RETURN_IF_ERROR(c->WithRankAtMost(c->input(5), 1, &unused));
+      TF_RETURN_IF_ERROR(c->WithRankAtMost(c->input(6), 1, &unused));
+
+      c->set_output(1, c->Scalar());
+      c->set_output(2, c->Scalar());
+      return Status::OK();
+    });
+
+REGISTER_OP("_MklQuantizedFusedMatMul")
+    .Input("a: T1")
+    .Input("b: T2")
+    .Input("args: num_args * Targs")
+    .Input("min_a: float")
+    .Input("max_a: float")
+    .Input("min_b: float")
+    .Input("max_b: float")
+    .Input("mkl_a: uint8")                // MKL second tensor
+    .Input("mkl_b: uint8")                // MKL second tensor
+    .Input("mkl_args: num_args * uint8")  // Mkl second tensors
+    .Input("mkl_min_a: uint8")            // MKL second tensor
+    .Input("mkl_max_a: uint8")            // MKL second tensor
+    .Input("mkl_min_b: uint8")            // MKL second tensor
+    .Input("mkl_max_b: uint8")            // MKL second tensor
+    .Output("product: Toutput")
+    .Output("min_product: float")
+    .Output("max_product: float")
+    .Output("mkl_product: uint8")      // MKL second tensor
+    .Output("mkl_min_product: uint8")  // MKL second tensor
+    .Output("mkl_max_product: uint8")  // MKL second tensor
+    .Attr("T1: quantizedtype")
+    .Attr("T2: quantizedtype")
+    .Attr("num_args: int >= 0")
+    .Attr("Targs: {float, quantizedtype}")
+    .Attr("Toutput: quantizedtype")
+    .Attr("T: quantizedtype")  // Additional attr "T" for MklToTf conversion
+    .Attr("transpose_a: bool = false")
+    .Attr("transpose_b: bool = false")
+    .Attr("fused_ops: list(string) = []")
+    .Attr("is_filter_const: bool = true")
+    .Attr("is_bias_const: bool = true")
+    // Attributes for the FusedBatchNorm ----------- //
+    .Attr("epsilon: float = 0.0001")
+    // Attributes for the LeakyRelu ----------------------------------------- //
+    .Attr("leakyrelu_alpha: float = 0.2")
+    .SetShapeFn([](InferenceContext* c) {
+      TF_RETURN_IF_ERROR(shape_inference::MatMulShape(c));
+      ShapeHandle unused;
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(2), 1, &unused));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(3), 0, &unused));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(4), 0, &unused));
+      TF_RETURN_IF_ERROR(c->WithRankAtMost(c->input(5), 1, &unused));
+      TF_RETURN_IF_ERROR(c->WithRankAtMost(c->input(6), 1, &unused));
+
+      c->set_output(1, c->Scalar());
+      c->set_output(2, c->Scalar());
+      return Status::OK();
+    });
+
+REGISTER_OP("_MklQuantizedFusedMatMulAndDequantize")
+    .Input("a: T1")
+    .Input("b: T2")
+    .Input("args: num_args * Targs")
+    .Input("min_a: float")
+    .Input("max_a: float")
+    .Input("min_b: float")
+    .Input("max_b: float")
+    .Input("mkl_a: uint8")                // MKL second tensor
+    .Input("mkl_b: uint8")                // MKL second tensor
+    .Input("mkl_args: num_args * uint8")  // Mkl second tensors
+    .Input("mkl_min_a: uint8")            // MKL second tensor
+    .Input("mkl_max_a: uint8")            // MKL second tensor
+    .Input("mkl_min_b: uint8")            // MKL second tensor
+    .Input("mkl_max_b: uint8")            // MKL second tensor
+    .Output("product: Toutput")
+    .Output("mkl_product: uint8")  // MKL second tensor
+    .Attr("T1: quantizedtype")
+    .Attr("T2: quantizedtype")
+    .Attr("num_args: int >= 0")
+    .Attr("Targs: {float, quantizedtype}")
+    .Attr("Toutput: {float}")
+    .Attr("T: {float}")  // Additional attr "T" for MklToTf conversion
+    .Attr("transpose_a: bool = false")
+    .Attr("transpose_b: bool = false")
+    .Attr("fused_ops: list(string) = []")
+    .Attr("is_filter_const: bool = true")
+    .Attr("is_bias_const: bool = true")
+    // Attributes for the FusedBatchNorm ----------- //
+    .Attr("epsilon: float = 0.0001")
+    // Attributes for the LeakyRelu ----------------------------------------- //
+    .Attr("leakyrelu_alpha: float = 0.2")
+    .SetShapeFn([](InferenceContext* c) {
+      TF_RETURN_IF_ERROR(shape_inference::MatMulShape(c));
+      ShapeHandle unused;
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(2), 1, &unused));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(3), 0, &unused));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(4), 0, &unused));
+      TF_RETURN_IF_ERROR(c->WithRankAtMost(c->input(5), 1, &unused));
+      TF_RETURN_IF_ERROR(c->WithRankAtMost(c->input(6), 1, &unused));
+
+      return Status::OK();
+    });
+
+REGISTER_OP("_MklQuantizedFusedMatMulAndRequantize")
+    .Input("a: T1")
+    .Input("b: T2")
+    .Input("args: num_args * Targs")
+    .Input("min_a: float")
+    .Input("max_a: float")
+    .Input("min_b: float")
+    .Input("max_b: float")
+    .Input("min_freezed_output: float")
+    .Input("max_freezed_output: float")
+    .Input("mkl_a: uint8")                // MKL second tensor
+    .Input("mkl_b: uint8")                // MKL second tensor
+    .Input("mkl_args: num_args * uint8")  // Mkl second tensors
+    .Input("mkl_min_a: uint8")            // MKL second tensor
+    .Input("mkl_max_a: uint8")            // MKL second tensor
+    .Input("mkl_min_b: uint8")            // MKL second tensor
+    .Input("mkl_max_b: uint8")            // MKL second tensor
+    .Input("mkl_min_freezed_output: uint8")
+    .Input("mkl_max_freezed_output: uint8")
+    .Output("product: Toutput")
+    .Output("min_product: float")
+    .Output("max_product: float")
+    .Output("mkl_product: uint8")      // MKL second tensor
+    .Output("mkl_min_product: uint8")  // MKL second tensor
+    .Output("mkl_max_product: uint8")  // MKL second tensor
+    .Attr("T1: quantizedtype")
+    .Attr("T2: quantizedtype")
+    .Attr("num_args: int >= 0")
+    .Attr("Targs: {float, quantizedtype}")
+    .Attr("Toutput: quantizedtype")
+    .Attr("T: quantizedtype")  // Additional attr "T" for MklToTf conversion
+    .Attr("transpose_a: bool = false")
+    .Attr("transpose_b: bool = false")
+    .Attr("fused_ops: list(string) = []")
+    .Attr("is_filter_const: bool = true")
+    .Attr("is_bias_const: bool = true")
+    // Attributes for the FusedBatchNorm ----------- //
+    .Attr("epsilon: float = 0.0001")
+    // Attributes for the LeakyRelu ----------------------------------------- //
+    .Attr("leakyrelu_alpha: float = 0.2")
+    .SetShapeFn([](InferenceContext* c) {
+      TF_RETURN_IF_ERROR(shape_inference::MatMulShape(c));
+      ShapeHandle unused;
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(2), 1, &unused));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(3), 0, &unused));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(4), 0, &unused));
+      TF_RETURN_IF_ERROR(c->WithRankAtMost(c->input(5), 1, &unused));
+      TF_RETURN_IF_ERROR(c->WithRankAtMost(c->input(6), 1, &unused));
+
+      c->set_output(1, c->Scalar());
+      c->set_output(2, c->Scalar());
+      return Status::OK();
+    });
+
 }  // namespace tensorflow
 
 #endif  // INTEL_MKL

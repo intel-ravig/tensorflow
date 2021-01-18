@@ -314,6 +314,11 @@ class MklLayoutRewritePass : public GraphOptimizationPass {
     csinfo_.pad = "Pad";
     csinfo_.pad_with_conv2d = "__MklDummyPadWithConv2D";
     csinfo_.pad_with_fused_conv2d = "__MklDummyPadWithFusedConv2D";
+    csinfo_.mkl_quantized_fused_matmul = "_MklQuantizedFusedMatMul";
+    csinfo_.mkl_quantized_fused_matmul_and_dequantize =
+        "_MklQuantizedFusedMatMulAndDequantize";
+    csinfo_.mkl_quantized_fused_matmul_and_requantize =
+        "_MklQuantizedFusedMatMulAndRequantize";
     csinfo_.quantized_avg_pool = "QuantizedAvgPool";
     csinfo_.quantized_concatv2 = "QuantizedConcatV2";
     csinfo_.quantized_conv2d = "QuantizedConv2D";
@@ -352,6 +357,11 @@ class MklLayoutRewritePass : public GraphOptimizationPass {
         "QuantizedDepthwiseConv2DWithBiasAndRelu";
     csinfo_.quantized_depthwise_conv2d_with_bias_and_relu_and_requantize =
         "QuantizedDepthwiseConv2DWithBiasAndReluAndRequantize";
+    csinfo_.quantized_fused_matmul = "_QuantizedFusedMatMul";
+    csinfo_.quantized_fused_matmul_and_dequantize =
+        "_QuantizedFusedMatMulAndDequantize";
+    csinfo_.quantized_fused_matmul_and_requantize =
+        "_QuantizedFusedMatMulAndRequantize";
     csinfo_.quantize_v2 = "QuantizeV2";
     csinfo_.relu = "Relu";
     csinfo_.relu_grad = "ReluGrad";
@@ -654,6 +664,17 @@ class MklLayoutRewritePass : public GraphOptimizationPass {
              csinfo_
                  .quantized_depthwise_conv2d_with_bias_and_relu_and_requantize),
          CopyAttrsQuantizedConv2D, AlwaysRewrite, GetRewriteCause()});
+    rinfo_.push_back(
+        {csinfo_.quantized_fused_matmul, csinfo_.mkl_quantized_fused_matmul,
+         CopyAttrsQuantizedFusedMatMul, AlwaysRewrite, GetRewriteCause()});
+    rinfo_.push_back({csinfo_.quantized_fused_matmul_and_dequantize,
+                      csinfo_.mkl_quantized_fused_matmul_and_dequantize,
+                      CopyAttrsQuantizedFusedMatMul, AlwaysRewrite,
+                      GetRewriteCause()});
+    rinfo_.push_back({csinfo_.quantized_fused_matmul_and_requantize,
+                      csinfo_.mkl_quantized_fused_matmul_and_requantize,
+                      CopyAttrsQuantizedFusedMatMul, AlwaysRewrite,
+                      GetRewriteCause()});
     rinfo_.push_back({csinfo_.quantize_v2,
                       mkl_op_registry::GetMklOpName(csinfo_.quantize_v2),
                       CopyAttrsAll, QuantizeOpRewrite, GetRewriteCause()});
@@ -967,6 +988,9 @@ class MklLayoutRewritePass : public GraphOptimizationPass {
     string mkl_native_pad_with_fused_conv2d;
     string mkl_pad_with_conv2d;
     string mkl_pad_with_fused_conv2d;
+    string mkl_quantized_fused_matmul;
+    string mkl_quantized_fused_matmul_and_dequantize;
+    string mkl_quantized_fused_matmul_and_requantize;
     string mul;
     string pad;
     string pad_with_conv2d;
@@ -995,6 +1019,9 @@ class MklLayoutRewritePass : public GraphOptimizationPass {
     string quantized_depthwise_conv2d_with_bias;
     string quantized_depthwise_conv2d_with_bias_and_relu;
     string quantized_depthwise_conv2d_with_bias_and_relu_and_requantize;
+    string quantized_fused_matmul;
+    string quantized_fused_matmul_and_dequantize;
+    string quantized_fused_matmul_and_requantize;
     string quantize_v2;
     string relu;
     string relu_grad;
@@ -2031,6 +2058,9 @@ class MklLayoutRewritePass : public GraphOptimizationPass {
                                              bool change_format = false);
   static void CopyAttrsQuantizedConv2D(const Node* orig_node, NodeBuilder* nb,
                                        bool change_format = false);
+  static void CopyAttrsQuantizedFusedMatMul(const Node* orig_node,
+                                            NodeBuilder* nb,
+                                            bool change_format = false);
   static void CopyFormatAttrsConv(const Node* orig_node, NodeBuilder* nb,
                                   const std::vector<int32>& strides,
                                   const std::vector<int32>& dilations,
@@ -2385,7 +2415,10 @@ Status MklLayoutRewritePass::SetUpInputs(
       "QuantizedDepthwiseConv2D",
       "QuantizedDepthwiseConv2DWithBias",
       "QuantizedDepthwiseConv2DWithBiasAndRelu",
-      "QuantizedDepthwiseConv2DWithBiasAndReluAndRequantize"};
+      "QuantizedDepthwiseConv2DWithBiasAndReluAndRequantize",
+      "_QuantizedFusedMatMul",
+      "_QuantizedFusedMatMulAndDequantize",
+      "_QuantizedFusedMatMulAndRequantize"};
   bool should_check_workspace =
       std::find(std::begin(quant_ops), std::end(quant_ops),
                 old_node->type_string()) == std::end(quant_ops);
@@ -2787,6 +2820,15 @@ void MklLayoutRewritePass::CopyAttrsQuantizedMatMulWithBiasAndDequantize(
   DataType T1;
   TF_CHECK_OK(GetNodeAttr(orig_node->def(), "T1", &T1));
   nb->Attr("T", T1);
+}
+
+void MklLayoutRewritePass::CopyAttrsQuantizedFusedMatMul(const Node* orig_node,
+                                                         NodeBuilder* nb,
+                                                         bool change_format) {
+  DataType Toutput;
+  TF_CHECK_OK(GetNodeAttr(orig_node->def(), "Toutput", &Toutput));
+  CopyAttrsAll(orig_node, nb, change_format);
+  nb->Attr("T", Toutput);  // added "T" for facilitating MklToTf conversion.
 }
 
 void MklLayoutRewritePass::CopyAttrsQuantizedMatMulWithBias(
@@ -3680,10 +3722,15 @@ MklLayoutRewritePass::CheckForQuantizedNodeRewrite(const Node* n) const {
           mkl_op_registry::GetMklOpName(n->type_string()), Tinput, Tfilter)) {
     type_attrs_present = true;
   } else if (TryGetNodeAttr(n->def(), "T1", &T1) &&
-             TryGetNodeAttr(n->def(), "T2", &T2) &&
-             mkl_op_registry::IsMklLayoutDependentOp(
-                 mkl_op_registry::GetMklOpName(n->type_string()), T1, T2)) {
-    type_attrs_present = true;
+             TryGetNodeAttr(n->def(), "T2", &T2)) {
+    StringPiece op_name(n->type_string());
+    // Assuming that we have T1 and T2 attribute for internal ops that is
+    // prefixed with "_".
+    absl::ConsumePrefix(&op_name, "_");
+    if (mkl_op_registry::IsMklLayoutDependentOp(
+            mkl_op_registry::GetMklOpName(string(op_name)), T1, T2)) {
+      type_attrs_present = true;
+    }
   }
 
   if (type_attrs_present) {

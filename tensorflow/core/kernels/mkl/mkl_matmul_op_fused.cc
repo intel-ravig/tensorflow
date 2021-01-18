@@ -22,16 +22,22 @@ limitations under the License.
 #include "tensorflow/core/framework/register_types.h"
 #include "tensorflow/core/kernels/fill_functor.h"
 #include "tensorflow/core/kernels/mkl/mkl_matmul_ops_common.h"
+#include "tensorflow/core/kernels/mkl/mkl_quantized_conv_ops.h"
+#include "tensorflow/core/kernels/no_op.h"
 #include "tensorflow/core/lib/core/errors.h"
 
 namespace tensorflow {
 
-// Fuse Operation
-template <typename Device, typename T, bool native_format = false>
-class MklFusedMatMulOp : public MklDnnMatMulOpBase<T, T> {
+// MatMul operation does not impose any restriction on which of the
+// inputs (first or second) is activation or weight. Typically, first one is
+// activation and the second one is weight. Hence, we interpret T1 as
+// activation type and T2 as weight type.
+template <typename Device, typename T1, typename T2, typename Tbias,
+          typename Toutput, bool native_format = false>
+class MklFusedMatMulOp : public MklDnnMatMulOpBase<T2, Tbias, Toutput> {
  public:
   explicit MklFusedMatMulOp(OpKernelConstruction* ctx)
-      : MklDnnMatMulOpBase<T, T>(ctx) {
+      : MklDnnMatMulOpBase<T2, Tbias, Toutput>(ctx) {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("fused_ops", &fused_ops_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("transpose_a", &transpose_a_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("transpose_b", &transpose_b_));
@@ -122,8 +128,9 @@ class MklFusedMatMulOp : public MklDnnMatMulOpBase<T, T> {
 
     // Extend the basic parameters for data types and fusions.
     ExtendMklDnnMatMulFwdParams(ctx, matmul_params);
-    MklDnnMatMulFwdPrimitive<T, T, T, T, T>* matmul_prim =
-        MklDnnMatMulFwdPrimitiveFactory<T, T, T, T, T>::Get(matmul_params, 0);
+    MklDnnMatMulFwdPrimitive<float, T1, T2, Tbias, Toutput>* matmul_prim =
+        MklDnnMatMulFwdPrimitiveFactory<float, T1, T2, Tbias, Toutput>::Get(
+            matmul_params, false);
 
     // Allocate output tensor.
     Tensor* dst_tensor = nullptr;
@@ -139,6 +146,7 @@ class MklFusedMatMulOp : public MklDnnMatMulOpBase<T, T> {
     TensorShape output_tf_shape({batch, channel});
 
     if (fuse_add_) {
+      kInputIndex_Add = ctx->num_inputs() / 2 - 1;
       const Tensor& add_tensor = MklGetInput(ctx, kInputIndex_Add);
       MklDnnShape add_mkl_shape;
       GetMklShape(ctx, kInputIndex_Add, &add_mkl_shape, native_format);
@@ -160,22 +168,22 @@ class MklFusedMatMulOp : public MklDnnMatMulOpBase<T, T> {
                                   native_format);
         auto output_format_tag =
             MklTensorFormatToMklDnnDataFormat(MklTensorFormat::FORMAT_NC);
-        auto add_md =
-            add_mkl_shape.IsMklTensor()
-                ? add_mkl_shape.GetMklLayout()
-                : memory::desc(dst_dims, MklDnnType<T>(), output_format_tag);
+        auto add_md = add_mkl_shape.IsMklTensor()
+                          ? add_mkl_shape.GetMklLayout()
+                          : memory::desc(dst_dims, MklDnnType<Tbias>(),
+                                         output_format_tag);
         auto dst_md =
-            memory::desc(dst_dims, MklDnnType<T>(), output_format_tag);
+            memory::desc(dst_dims, MklDnnType<Tbias>(), output_format_tag);
 
-        void* add_buf =
-            static_cast<void*>(const_cast<T*>(add_tensor.flat<T>().data()));
-        void* dst_buf = static_cast<void*>((dst_tensor)->flat<T>().data());
+        void* add_buf = static_cast<void*>(
+            const_cast<Tbias*>(add_tensor.flat<Tbias>().data()));
+        void* dst_buf = static_cast<void*>((dst_tensor)->flat<Tbias>().data());
 
         if (native_format) {
           // We are simply deep copying the add_tensor to dst_tensor without
           // changing memory layout, hence using same memory descriptor.
           add_md = dst_md =
-              memory::desc({add_tensor.NumElements()}, MklDnnType<T>(),
+              memory::desc({add_tensor.NumElements()}, MklDnnType<Tbias>(),
                            mkldnn::memory::format_tag::x);
         }
 
@@ -199,31 +207,32 @@ class MklFusedMatMulOp : public MklDnnMatMulOpBase<T, T> {
 
     try {
       // Prepare the input and output for primitive.
-      T* src_data = const_cast<T*>(src_tensor.flat<T>().data());
-      T* weight_data = const_cast<T*>(weight_tensor.flat<T>().data());
-      T* bias_data = const_cast<T*>(bias_tensor.flat<T>().data());
-      T* dst_data = const_cast<T*>(dst_tensor->flat<T>().data());
+      T1* src_data = const_cast<T1*>(src_tensor.flat<T1>().data());
+      T2* weight_data = const_cast<T2*>(weight_tensor.flat<T2>().data());
+      Tbias* bias_data = const_cast<Tbias*>(bias_tensor.flat<Tbias>().data());
+      Toutput* dst_data =
+          const_cast<Toutput*>(dst_tensor->flat<Toutput>().data());
 
       // Reorder input if necessary.
-      MklDnnData<T> src_mkl(&(this->cpu_engine_));
-      MklDnnData<T> weight_mkl(&(this->cpu_engine_));
+      MklDnnData<T1> src_mkl(&(this->cpu_engine_));
+      MklDnnData<T2> weight_mkl(&(this->cpu_engine_));
 
       auto src_md = src_mkl_shape.IsMklTensor()
                         ? src_mkl_shape.GetMklLayout()
-                        : memory::desc(src_dims, MklDnnType<T>(), src_format);
+                        : memory::desc(src_dims, MklDnnType<T1>(), src_format);
 
       if (src_md != matmul_pd->src_desc()) {
         src_mkl.SetUsrMem(src_md, src_data);
         src_mkl.CheckReorderToOpMem(matmul_pd.get()->src_desc(),
                                     this->cpu_engine_, ctx);
-        src_data = reinterpret_cast<T*>(src_mkl.GetOpMem().get_data_handle());
+        src_data = reinterpret_cast<T1*>(src_mkl.GetOpMem().get_data_handle());
       }
 
       // Get cached data when weight is const.
       const memory::desc weight_md =
-          memory::desc(weight_dims, MklDnnType<T>(), weight_format);
+          memory::desc(weight_dims, MklDnnType<T2>(), weight_format);
       if (weight_md != matmul_pd->weights_desc()) {
-        T* cached_weight_data = nullptr;
+        T2* cached_weight_data = nullptr;
 
         if (this->is_weight_const_) {
           if (this->IsWeightCacheEmpty(ctx)) {
@@ -244,12 +253,20 @@ class MklFusedMatMulOp : public MklDnnMatMulOpBase<T, T> {
           weight_mkl.CheckReorderToOpMem(matmul_pd.get()->weights_desc(),
                                          this->cpu_engine_, ctx);
           weight_data =
-              reinterpret_cast<T*>(weight_mkl.GetOpMem().get_data_handle());
+              reinterpret_cast<T2*>(weight_mkl.GetOpMem().get_data_handle());
         }
       }
       std::shared_ptr<stream> cpu_stream;
       MklDnnThreadPool eigen_tp(ctx);
       cpu_stream.reset(CreateStream(&eigen_tp, matmul_prim->GetEngine()));
+
+      // Temporary tensor for scaled bias when op is quantized version.
+      Tensor temp_scaled_bias_tensor;
+      if (std::is_same<T2, qint8>::value) {
+        this->GetScaledBias(ctx, matmul_pd, bias_tensor,
+                            &temp_scaled_bias_tensor, &bias_data);
+      }
+
       // Execute fused matmul op.
       matmul_prim->Execute(src_data, weight_data, bias_data, dst_data,
                            cpu_stream);
@@ -262,8 +279,14 @@ class MklFusedMatMulOp : public MklDnnMatMulOpBase<T, T> {
     }
   }
 
-  void ExtendMklDnnMatMulFwdParams(OpKernelContext* ctx,
-                                   MklDnnMatMulFwdParams& params) {
+  virtual void ExtendMklDnnMatMulFwdParams(OpKernelContext* ctx,
+                                           MklDnnMatMulFwdParams& params) {
+    // Create a string from data types of input, weight, bias, and output.
+    params.dtypes.append(typeid(T1).name());
+    params.dtypes.append(typeid(T2).name());
+    params.dtypes.append(typeid(Tbias).name());
+    params.dtypes.append(typeid(Toutput).name());
+
     if (fused_ops_.size() == 2) {
       string post_op = fused_ops_[1];
 
@@ -292,31 +315,448 @@ class MklFusedMatMulOp : public MklDnnMatMulOpBase<T, T> {
     }
   }
 
+  virtual void GetScaledBias(
+      OpKernelContext* ctx,
+      std::shared_ptr<mkldnn::inner_product_forward::primitive_desc>& matmul_pd,
+      const Tensor& bias_tensor, Tensor* temp_scaled_bias_tensor,
+      Tbias** bias_data) {}
+
+ protected:
+  std::vector<string> fused_ops_;
+
  private:
   bool fuse_add_ = false;
   bool transpose_a_;
   bool transpose_b_;
   float leakyrelu_alpha = 0.2;
-  std::vector<string> fused_ops_;
-  const int kInputIndex_Add = 3;
+  int kInputIndex_Add = 3;
   const int kOutputIndex_Dst = 0;
-};  // namespace tensorflow
+};
+
+template <typename Device, typename T1, typename T2, typename Tbias,
+          typename Toutput, bool native_format = false>
+class MklQuantizedFusedMatMulOp
+    : public MklFusedMatMulOp<Device, T1, T2, Tbias, Toutput, native_format> {
+ public:
+  explicit MklQuantizedFusedMatMulOp(OpKernelConstruction* context)
+      : MklFusedMatMulOp<Device, T1, T2, Tbias, Toutput, native_format>(
+            context) {
+    OP_REQUIRES_OK(context,
+                   context->GetAttr("is_bias_const", &(this->is_bias_const_)));
+  }
+
+  void Compute(OpKernelContext* ctx) override {
+    MklFusedMatMulOp<Device, T1, T2, Tbias, Toutput, native_format>::Compute(
+        ctx);
+    // Compute additional outputs
+    // if (std::is_same<Toutput, qint8>::value ||
+    //     std::is_same<Toutput, quint8>::value ||
+    //     std::is_same<Toutput, qint32>::value) {
+    //   Tensor* min_output = nullptr;
+    //   Tensor* max_output = nullptr;
+    //   MklDnnShape mkl_shape_min_output;
+    //   MklDnnShape mkl_shape_max_output;
+    //   mkl_shape_min_output.SetMklTensor(false);
+    //   mkl_shape_max_output.SetMklTensor(false);
+    //   AllocateOutputSetMklShape(ctx, 1, &min_output, {},
+    //   mkl_shape_min_output); AllocateOutputSetMklShape(ctx, 2, &max_output,
+    //   {}, mkl_shape_max_output); if (std::is_same<Toutput, qint32>::value) {
+    //     // Allowed fusions are (i) BiasAdd and (ii) BiasAdd + Relu. Other
+    //     // activation being non-linear is ill-formed, since min-max are not
+    //     // linear in intermediate output of MatMul.
+    //     OP_REQUIRES(
+    //         ctx,
+    //         (this->fused_ops_.size() == 1) /*BiasAdd*/ ||
+    //             (this->fused_ops_.size() == 2 && this->fused_ops_[1] ==
+    //             "Relu"),
+    //         errors::InvalidArgument("Unsupported fusion."));
+    //     const float min_input =
+    //         ctx->input(kInputIndexMinInput).flat<float>()(0);
+    //     const float max_input =
+    //         ctx->input(kInputIndexMaxInput).flat<float>()(0);
+    //     const float min_weight =
+    //         ctx->input(kInputIndexMinWeight).flat<float>()(0);
+    //     const float max_weight =
+    //         ctx->input(kInputIndexMaxWeight).flat<float>()(0);
+    //     float min_output_value;
+    //     float max_output_value;
+    //     MklQuantizationRangeForMultiplication<T1, T2, qint32>(
+    //         min_input, max_input, min_weight, max_weight, &min_output_value,
+    //         &max_output_value);
+    //     min_output->flat<float>()(0) = min_output_value;
+    //     max_output->flat<float>()(0) = max_output_value;
+    //   } else {
+    //     // When output type is qint8 or quint8, the kernel is registered for
+    //     // Requantize fusion and desired output min-max are inputs to the
+    //     // kernel.
+    //     min_output->flat<float>()(0) =
+    //         ctx->input(kInputIndexMinOutput).flat<float>()(0);
+    //     max_output->flat<float>()(0) =
+    //         ctx->input(kInputIndexMaxOutput).flat<float>()(0);
+    //   }
+    // } else if (std::is_same<Toutput, float>::value) {
+    //   // Kernel is registered for Dequantization fusion. Nothing to do.
+    // } else {
+    //   OP_REQUIRES_OK(ctx, errors::InvalidArgument("Unsupported output
+    //   type"));
+    // }
+  }
+
+  void ExtendMklDnnMatMulFwdParams(OpKernelContext* ctx,
+                                   MklDnnMatMulFwdParams& params) override {
+    // Create a string from data types of input, weight, bias, and output.
+    params.dtypes.append(typeid(T1).name());
+    params.dtypes.append(typeid(T2).name());
+    params.dtypes.append(typeid(Tbias).name());
+    params.dtypes.append(typeid(Toutput).name());
+
+    if (std::is_same<Toutput, qint32>::value) {
+      if (this->fused_ops_.size() == 1) {
+        return;
+      } else if (this->fused_ops_.size() == 2 &&
+                 this->fused_ops_[1] == "Relu") {
+        params.post_op_params.push_back({"relu", {1.0, 0.0, 0.0}});
+        return;
+      } else {
+        OP_REQUIRES_OK(ctx, errors::InvalidArgument(
+                                "Activation other than Relu is not supported, "
+                                "when quantized fused op has output data-type "
+                                "as qint32. Fused op got activation function: ",
+                                this->fused_ops_[1]));
+      }
+    } else if (std::is_same<Toutput, qint8>::value ||
+               std::is_same<Toutput, quint8>::value ||
+               std::is_same<Toutput, float>::value) {
+      // When Toutput is float, the fusion semantic has its output dequantized,
+      // and when Toutput is q{u}int8 the fusion semantic has its output
+      // requantized.
+      const float min_input = ctx->input(kInputIndexMinInput).flat<float>()(0);
+      const float max_input = ctx->input(kInputIndexMaxInput).flat<float>()(0);
+      const Tensor& min_weight_tensor = ctx->input(kInputIndexMinWeight);
+      const Tensor& max_weight_tensor = ctx->input(kInputIndexMaxWeight);
+      const float* min_weight = min_weight_tensor.flat<float>().data();
+      const float* max_weight = max_weight_tensor.flat<float>().data();
+      const size_t num_output_channels = min_weight_tensor.NumElements();
+
+      const float max_int8_input =
+          (std::is_same<T1, quint8>::value) ? 255.0f : 127.0f;
+      const float max_int8_weight =
+          (std::is_same<T2, quint8>::value) ? 255.0f : 127.0f;
+      const float range_input =
+          std::max(std::abs(min_input), std::abs(max_input));
+
+      std::vector<float> scale_output(num_output_channels);
+      for (size_t i = 0; i < num_output_channels; ++i) {
+        float range_weight =
+            std::max(std::abs(min_weight[i]), std::abs(max_weight[i]));
+        scale_output[i] =
+            (range_input * range_weight) / (max_int8_input * max_int8_weight);
+      }
+
+      float scale_post_op = 1.0;
+      if (!std::is_same<Toutput, float>::value) {
+        const float min_output =
+            ctx->input(kInputIndexMinOutput).flat<float>()(0);
+        const float max_output =
+            ctx->input(kInputIndexMaxOutput).flat<float>()(0);
+        const float range_output =
+            std::max(std::abs(min_output), std::abs(max_output));
+
+        if (std::is_same<Toutput, qint8>::value) {
+          if (this->fused_ops_.size() == 1) {
+            for (size_t i = 0; i < scale_output.size(); ++i) {
+              scale_output[i] = scale_output[i] * (127.0f / range_output);
+            }
+            params.post_op_params.push_back({"output_scale", scale_output});
+            return;
+          }
+          scale_post_op = 127.0f / range_output;
+        } else if (std::is_same<Toutput, quint8>::value) {
+          // This is only supported when activation is Relu or Relu6.
+          OP_REQUIRES(
+              ctx,
+              (this->fused_ops_.size() == 2 &&
+               (this->fused_ops_[1] == "Relu" ||
+                this->fused_ops_[1] == "Relu6")),
+              errors::InvalidArgument(
+                  "Unsupported QuantizedFusedMatMul with output type quint8"));
+          scale_post_op = 255.0f / range_output;
+        }
+      }
+
+      // Dequantize
+      FactoryKeyCreator partial_key;
+      partial_key.AddAsKey<float>(range_input);
+      partial_key.AddAsKey<const float*>(min_weight);
+      partial_key.AddAsKey<const float*>(max_weight);
+      params.post_op_params.push_back(
+          {"output_scale", scale_output, partial_key.GetKey()});
+
+      // Apply activation, if any, after Dequantize. Note scale_post_op along
+      // with output type would take care of both Dequantize and Requantize
+      // fusion.
+      if (this->fused_ops_.size() == 2) {
+        string activation = this->fused_ops_[1];
+        if (activation == "Relu") {
+          params.post_op_params.push_back({"relu", {scale_post_op, 0.0, 0.0}});
+        } else if (activation == "Relu6") {
+          params.post_op_params.push_back({"relu6", {scale_post_op, 6.0, 0.0}});
+        } else if (activation == "Elu") {
+          params.post_op_params.push_back({"elu", {scale_post_op, 1.0, 0.0}});
+        } else if (activation == "GeluApproximate") {
+          params.post_op_params.push_back(
+              {"gelu_approximate", {scale_post_op, 1.0, 0.0}});
+        } else if (activation == "GeluExact") {
+          params.post_op_params.push_back(
+              {"gelu_exact", {scale_post_op, 1.0, 0.0}});
+        } else if (activation == "Tanh") {
+          params.post_op_params.push_back({"tanh", {scale_post_op, 0.0, 0.0}});
+        } /* temporary hack*/ else if (activation == "Add") {
+          params.post_op_params.push_back({"sum", {1.0}});
+        } else {
+          OP_REQUIRES_OK(ctx,
+                         errors::InvalidArgument(
+                             "Unsupported Activation in QuantizedFusedMatMul: ",
+                             activation));
+        }
+      }
+    } else {
+      OP_REQUIRES_OK(ctx,
+                     errors::InvalidArgument(
+                         "Unsupported output type in QuantizedFusedMatMul."));
+    }
+  }
+
+  void GetScaledBias(
+      OpKernelContext* ctx,
+      std::shared_ptr<mkldnn::inner_product_forward::primitive_desc>& matmul_pd,
+      const Tensor& bias_tensor, Tensor* temp_scaled_bias_tensor,
+      Tbias** bias_data) override {
+    const float min_input = ctx->input(kInputIndexMinInput).flat<float>()(0);
+    const float max_input = ctx->input(kInputIndexMaxInput).flat<float>()(0);
+    const Tensor& min_weight_tensor = ctx->input(kInputIndexMinWeight);
+    const Tensor& max_weight_tensor = ctx->input(kInputIndexMaxWeight);
+    const float* min_weight = min_weight_tensor.flat<float>().data();
+    const float* max_weight = max_weight_tensor.flat<float>().data();
+    const size_t num_output_channels = min_weight_tensor.NumElements();
+
+    const float max_int8_input =
+        (std::is_same<T1, quint8>::value) ? 255.0f : 127.0f;
+    const float max_int8_weight =
+        (std::is_same<T2, quint8>::value) ? 255.0f : 127.0f;
+    const float range_input =
+        std::max(std::abs(min_input), std::abs(max_input));
+
+    if (this->current_scale_bias_.size() != num_output_channels) {
+      this->current_scale_bias_.resize(num_output_channels);
+    }
+    for (size_t i = 0; i < num_output_channels; ++i) {
+      float range_weight =
+          std::max(std::abs(min_weight[i]), std::abs(max_weight[i]));
+      float scale_bias =
+          (max_int8_input * max_int8_weight) / (range_input * range_weight);
+      this->current_scale_bias_[i] = scale_bias;
+    }
+
+    if (this->is_bias_const_ && !this->IsBiasCacheEmpty() &&
+        this->IsCachedBiasValid()) {
+      this->GetCachedBias(ctx, bias_data);
+    } else {
+      mkldnn::primitive_attr bias_attr;
+      (num_output_channels == 1)
+          ? bias_attr.set_output_scales(0, this->current_scale_bias_)
+          : bias_attr.set_output_scales(1, this->current_scale_bias_);
+
+      void* input_bias_buf = static_cast<void*>(
+          const_cast<Tbias*>(bias_tensor.flat<Tbias>().data()));
+      memory::dims input_bias_dims =
+          memory::dims({bias_tensor.shape().dim_size(0)});
+      auto input_bias_md = mkldnn::memory::desc(
+          input_bias_dims, MklDnnType<Tbias>(), memory::format_tag::x);
+      auto input_bias_mem =
+          mkldnn::memory(input_bias_md, this->cpu_engine_, input_bias_buf);
+
+      auto scaled_bias_md = matmul_pd->bias_desc();
+      TensorShape scaled_bias_shape;
+      scaled_bias_shape.AddDim((scaled_bias_md.get_size() / sizeof(Tbias)));
+      OP_REQUIRES_OK(
+          ctx, ctx->allocate_temp(DataTypeToEnum<Tbias>::v(), scaled_bias_shape,
+                                  temp_scaled_bias_tensor));
+      void* scaled_bias_buf =
+          static_cast<void*>(temp_scaled_bias_tensor->flat<Tbias>().data());
+      auto scaled_bias_mem =
+          mkldnn::memory(scaled_bias_md, this->cpu_engine_, scaled_bias_buf);
+
+      auto reorder_prim =
+          mkldnn::reorder(input_bias_mem, scaled_bias_mem, bias_attr);
+      std::unordered_map<int, memory> reorder_net_args = {
+          {MKLDNN_ARG_FROM, input_bias_mem}, {MKLDNN_ARG_TO, scaled_bias_mem}};
+      reorder_prim.execute(mkldnn::stream(this->cpu_engine_), reorder_net_args);
+      *bias_data = temp_scaled_bias_tensor->flat<Tbias>().data();
+
+      // Caching is expensive, so cache only once.
+      if (this->is_bias_const_ && this->IsBiasCacheEmpty()) {
+        if (this->fixed_scale_bias_.size() !=
+            this->current_scale_bias_.size()) {
+          this->fixed_scale_bias_.resize(this->current_scale_bias_.size());
+        }
+        for (size_t i = 0; i < this->current_scale_bias_.size(); ++i) {
+          this->fixed_scale_bias_[i] = this->current_scale_bias_[i];
+        }
+        this->CacheBias(ctx, *temp_scaled_bias_tensor);
+      }
+    }
+  }
+
+  bool IsCachedBiasValid() override {
+    for (size_t i = 0; i < this->fixed_scale_bias_.size(); ++i) {
+      if (std::abs(this->fixed_scale_bias_[i] - this->current_scale_bias_[i]) >
+          1e-5) {
+        return false;
+      }
+    }
+    return (this->fixed_scale_bias_.size() > 0) && true;
+  }
+
+ private:
+  const int kInputIndexMinInput = 3;
+  const int kInputIndexMaxInput = 4;
+  const int kInputIndexMinWeight = 5;
+  const int kInputIndexMaxWeight = 6;
+  const int kInputIndexMinOutput = 7;
+  const int kInputIndexMaxOutput = 8;
+
+  std::vector<float> fixed_scale_bias_ = std::vector<float>(1, 1.0f);
+
+  // Set to a value such that difference with fixed is > 1e-5.
+  // During, each kernel executation time it will be overwritten.
+  std::vector<float> current_scale_bias_ = std::vector<float>(1, 1.1f);
+};
 
 // Register mkl kernels for supported operations and types.
-#define REGISTER_FUSEDMATMUL_MKL_SUPPORTED_KERNELS_TYPES(type)                \
-  REGISTER_KERNEL_BUILDER(                                                    \
-      Name("_MklFusedMatMul")                                                 \
-          .Device(DEVICE_CPU)                                                 \
-          .TypeConstraint<type>("T")                                          \
-          .Label(mkl_op_registry::kMklLayoutDependentOpLabel),                \
-      MklFusedMatMulOp<CPUDevice, type>);                                     \
-  REGISTER_KERNEL_BUILDER(Name("_MklNativeFusedMatMul")                       \
-                              .Device(DEVICE_CPU)                             \
-                              .TypeConstraint<type>("T")                      \
-                              .Label(mkl_op_registry::kMklNameChangeOpLabel), \
-                          MklFusedMatMulOp<CPUDevice, type, true>);
+#define REGISTER_FUSEDMATMUL_MKL_SUPPORTED_KERNELS_TYPES(type) \
+  REGISTER_KERNEL_BUILDER(                                     \
+      Name("_MklFusedMatMul")                                  \
+          .Device(DEVICE_CPU)                                  \
+          .TypeConstraint<type>("T")                           \
+          .Label(mkl_op_registry::kMklLayoutDependentOpLabel), \
+      MklFusedMatMulOp<CPUDevice, type, type, type, type>);    \
+  REGISTER_KERNEL_BUILDER(                                     \
+      Name("_MklNativeFusedMatMul")                            \
+          .Device(DEVICE_CPU)                                  \
+          .TypeConstraint<type>("T")                           \
+          .Label(mkl_op_registry::kMklNameChangeOpLabel),      \
+      MklFusedMatMulOp<CPUDevice, type, type, type, type, true>);
 TF_CALL_float(REGISTER_FUSEDMATMUL_MKL_SUPPORTED_KERNELS_TYPES);
 TF_CALL_bfloat16(REGISTER_FUSEDMATMUL_MKL_SUPPORTED_KERNELS_TYPES);
+#undef REGISTER_FUSEDMATMUL_MKL_SUPPORTED_KERNELS_TYPES
+
+REGISTER_KERNEL_BUILDER(Name("_QuantizedFusedMatMul")
+                            .Device(DEVICE_CPU)
+                            .TypeConstraint("T1", {DT_QUINT8, DT_QINT8})
+                            .TypeConstraint<qint8>("T2")
+                            .TypeConstraint("Targs", {DT_FLOAT, DT_QUINT8,
+                                                      DT_QINT8, DT_QINT32})
+                            .TypeConstraint<qint32>("Toutput"),
+                        NoOp);
+
+REGISTER_KERNEL_BUILDER(Name("_QuantizedFusedMatMulAndDequantize")
+                            .Device(DEVICE_CPU)
+                            .TypeConstraint("T1", {DT_QUINT8, DT_QINT8})
+                            .TypeConstraint<qint8>("T2")
+                            .TypeConstraint("Targs", {DT_FLOAT, DT_QUINT8,
+                                                      DT_QINT8, DT_QINT32})
+                            .TypeConstraint<float>("Toutput"),
+                        NoOp);
+
+REGISTER_KERNEL_BUILDER(Name("_QuantizedFusedMatMulAndRequantize")
+                            .Device(DEVICE_CPU)
+                            .TypeConstraint("T1", {DT_QUINT8, DT_QINT8})
+                            .TypeConstraint<qint8>("T2")
+                            .TypeConstraint("Targs", {DT_FLOAT, DT_QUINT8,
+                                                      DT_QINT8, DT_QINT32})
+                            .TypeConstraint("Toutput", {DT_QUINT8, DT_QINT8}),
+                        NoOp);
+
+REGISTER_KERNEL_BUILDER(
+    Name("_MklQuantizedFusedMatMul")
+        .Device(DEVICE_CPU)
+        .TypeConstraint<quint8>("T1")
+        .TypeConstraint<qint8>("T2")
+        .TypeConstraint<float>("Targs")
+        .TypeConstraint<qint32>("Toutput")
+        .Label(mkl_op_registry::kMklQuantizedOpLabel),
+    MklQuantizedFusedMatMulOp<CPUDevice, quint8, qint8, float, qint32>);
+
+REGISTER_KERNEL_BUILDER(
+    Name("_MklQuantizedFusedMatMul")
+        .Device(DEVICE_CPU)
+        .TypeConstraint<qint8>("T1")
+        .TypeConstraint<qint8>("T2")
+        .TypeConstraint<float>("Targs")
+        .TypeConstraint<qint32>("Toutput")
+        .Label(mkl_op_registry::kMklQuantizedOpLabel),
+    MklQuantizedFusedMatMulOp<CPUDevice, qint8, qint8, float, qint32>);
+
+REGISTER_KERNEL_BUILDER(
+    Name("_MklQuantizedFusedMatMulAndDequantize")
+        .Device(DEVICE_CPU)
+        .TypeConstraint<quint8>("T1")
+        .TypeConstraint<qint8>("T2")
+        .TypeConstraint<float>("Targs")
+        .TypeConstraint<float>("Toutput")
+        .Label(mkl_op_registry::kMklQuantizedOpLabel),
+    MklQuantizedFusedMatMulOp<CPUDevice, quint8, qint8, float, float>);
+
+REGISTER_KERNEL_BUILDER(
+    Name("_MklQuantizedFusedMatMulAndDequantize")
+        .Device(DEVICE_CPU)
+        .TypeConstraint<qint8>("T1")
+        .TypeConstraint<qint8>("T2")
+        .TypeConstraint<float>("Targs")
+        .TypeConstraint<float>("Toutput")
+        .Label(mkl_op_registry::kMklQuantizedOpLabel),
+    MklQuantizedFusedMatMulOp<CPUDevice, qint8, qint8, float, float>);
+
+REGISTER_KERNEL_BUILDER(
+    Name("_MklQuantizedFusedMatMulAndRequantize")
+        .Device(DEVICE_CPU)
+        .TypeConstraint<quint8>("T1")
+        .TypeConstraint<qint8>("T2")
+        .TypeConstraint<float>("Targs")
+        .TypeConstraint<qint8>("Toutput")
+        .Label(mkl_op_registry::kMklQuantizedOpLabel),
+    MklQuantizedFusedMatMulOp<CPUDevice, quint8, qint8, float, qint8>);
+
+REGISTER_KERNEL_BUILDER(
+    Name("_MklQuantizedFusedMatMulAndRequantize")
+        .Device(DEVICE_CPU)
+        .TypeConstraint<qint8>("T1")
+        .TypeConstraint<qint8>("T2")
+        .TypeConstraint<float>("Targs")
+        .TypeConstraint<qint8>("Toutput")
+        .Label(mkl_op_registry::kMklQuantizedOpLabel),
+    MklQuantizedFusedMatMulOp<CPUDevice, qint8, qint8, float, qint8>);
+
+REGISTER_KERNEL_BUILDER(
+    Name("_MklQuantizedFusedMatMulAndRequantize")
+        .Device(DEVICE_CPU)
+        .TypeConstraint<quint8>("T1")
+        .TypeConstraint<qint8>("T2")
+        .TypeConstraint<float>("Targs")
+        .TypeConstraint<quint8>("Toutput")
+        .Label(mkl_op_registry::kMklQuantizedOpLabel),
+    MklQuantizedFusedMatMulOp<CPUDevice, quint8, qint8, float, quint8>);
+
+REGISTER_KERNEL_BUILDER(
+    Name("_MklQuantizedFusedMatMulAndRequantize")
+        .Device(DEVICE_CPU)
+        .TypeConstraint<qint8>("T1")
+        .TypeConstraint<qint8>("T2")
+        .TypeConstraint<float>("Targs")
+        .TypeConstraint<quint8>("Toutput")
+        .Label(mkl_op_registry::kMklQuantizedOpLabel),
+    MklQuantizedFusedMatMulOp<CPUDevice, qint8, qint8, float, quint8>);
 
 }  // namespace tensorflow
 

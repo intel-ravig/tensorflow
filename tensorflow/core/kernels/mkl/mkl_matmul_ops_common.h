@@ -24,6 +24,7 @@ limitations under the License.
 #include "mkldnn.hpp"
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/op_kernel.h"
+#include "tensorflow/core/framework/tensor_util.h"
 #include "tensorflow/core/util/mkl_util.h"
 
 using mkldnn::inner_product_forward;
@@ -59,6 +60,7 @@ struct MklDnnMatMulFwdParams {
   struct PostOpParam {
     string name;
     std::vector<float> param;
+    string partial_key = string("");
   };
   std::vector<PostOpParam> post_op_params;
 
@@ -253,10 +255,10 @@ class MklDnnMatMulFwdPrimitive : public MklPrimitive {
           post_ops.append_eltwise(op_scale, mkldnn::algorithm::eltwise_tanh,
                                   op_alpha, op_beta);
         } else if (post_op_param.name == "output_scale") {
-          DCHECK_EQ(post_op_param.param.size(), 1);
-          std::vector<float> scales;
-          scales.push_back(post_op_param.param[0]);
-          post_ops_attr.set_output_scales(0, scales);
+          if (post_op_param.param.size() == 1)
+            post_ops_attr.set_output_scales(0, post_op_param.param);
+          else
+            post_ops_attr.set_output_scales(2, post_op_param.param);
         } else if (post_op_param.name == "sum") {
           DCHECK_EQ(post_op_param.param.size(), 1);
           float op_scale = post_op_param.param[0];
@@ -266,6 +268,8 @@ class MklDnnMatMulFwdPrimitive : public MklPrimitive {
           DCHECK((post_op_param.name == "relu") ||
                  (post_op_param.name == "relu6") ||
                  (post_op_param.name == "elu") ||
+                 (post_op_param.name == "gelu_approximate") ||
+                 (post_op_param.name == "gelu_exact") ||
                  (post_op_param.name == "tanh") ||
                  (post_op_param.name == "sum") ||
                  (post_op_param.name == "leakyrelu") ||
@@ -376,9 +380,8 @@ class MklDnnMatMulFwdPrimitiveFactory : public MklPrimitiveFactory<T> {
         key_creator.AddAsKey(post_op_param.name);
         key_creator.AddAsKey(post_op_param.param[0]);
       } else if (post_op_param.name == "output_scale") {
-        DCHECK_EQ(post_op_param.param.size(), 1);
         key_creator.AddAsKey(post_op_param.name);
-        key_creator.AddAsKey(post_op_param.param[0]);
+        key_creator.AddAsKey(post_op_param.partial_key);
       } else {
         return string("not_a_key");
       }
@@ -399,7 +402,7 @@ class MklDnnMatMulFwdPrimitiveFactory : public MklPrimitiveFactory<T> {
   }
 };
 
-template <class Tweight, class Toutput>
+template <class Tweight, class Tbias, class Toutput>
 class MklDnnMatMulOpBase : public OpKernel {
  public:
   explicit MklDnnMatMulOpBase(OpKernelConstruction* context)
@@ -511,6 +514,32 @@ class MklDnnMatMulOpBase : public OpKernel {
 
   engine cpu_engine_ = engine(engine::kind::cpu, 0);
 
+  bool IsBiasCacheEmpty() TF_LOCKS_EXCLUDED(bias_cache_mutex_) {
+    tf_shared_lock lock(bias_cache_mutex_);
+    return (cached_bias_data_pt_.NumElements() == 0);
+  }
+
+  virtual bool IsCachedBiasValid() { return false; }
+
+  void CacheBias(OpKernelContext* ctx, const Tensor& temp_scaled_bias_tensor) {
+    mutex_lock lock(bias_cache_mutex_);
+    if (cached_bias_data_pt_.NumElements() > 0) {
+      return;
+    }
+    Tensor* bias_tensor = nullptr;
+    OP_REQUIRES_OK(
+        ctx, ctx->allocate_persistent(temp_scaled_bias_tensor.dtype(),
+                                      temp_scaled_bias_tensor.shape(),
+                                      &cached_bias_data_pt_, &bias_tensor));
+    tensor::DeepCopy(temp_scaled_bias_tensor, bias_tensor);
+  }
+
+  void GetCachedBias(OpKernelContext* ctx, Tbias** bias_data) {
+    tf_shared_lock lock(bias_cache_mutex_);
+    const Tensor& cached_bias_data = *(cached_bias_data_pt_.AccessTensor(ctx));
+    *bias_data = const_cast<Tbias*>(cached_bias_data.flat<Tbias>().data());
+  }
+
  protected:
   // Tensor to save reordered weight
   mutex mu_;
@@ -518,6 +547,12 @@ class MklDnnMatMulOpBase : public OpKernel {
   PersistentTensor weight_oi_md_ TF_GUARDED_BY(mu_);
 
   bool is_weight_const_;
+
+  // Persistent tensor for bias caching
+  // TODO(mdfaijul): Do we need to cache memory descriptor as well?
+  bool is_bias_const_ = false;
+  mutex bias_cache_mutex_;
+  PersistentTensor cached_bias_data_pt_ TF_GUARDED_BY(bias_cache_mutex_);
 
   const int kInputIndexSrc = 0;
   const int kInputIndexWeight = 1;
