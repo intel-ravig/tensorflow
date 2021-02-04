@@ -343,63 +343,66 @@ class MklQuantizedFusedMatMulOp
             context) {
     OP_REQUIRES_OK(context,
                    context->GetAttr("is_bias_const", &(this->is_bias_const_)));
+    OP_REQUIRES_OK(context, context->GetAttr("input_quant_mode", &mode_));
   }
 
   void Compute(OpKernelContext* ctx) override {
     MklFusedMatMulOp<Device, T1, T2, Tbias, Toutput, native_format>::Compute(
         ctx);
     // Compute additional outputs
-    // if (std::is_same<Toutput, qint8>::value ||
-    //     std::is_same<Toutput, quint8>::value ||
-    //     std::is_same<Toutput, qint32>::value) {
-    //   Tensor* min_output = nullptr;
-    //   Tensor* max_output = nullptr;
-    //   MklDnnShape mkl_shape_min_output;
-    //   MklDnnShape mkl_shape_max_output;
-    //   mkl_shape_min_output.SetMklTensor(false);
-    //   mkl_shape_max_output.SetMklTensor(false);
-    //   AllocateOutputSetMklShape(ctx, 1, &min_output, {},
-    //   mkl_shape_min_output); AllocateOutputSetMklShape(ctx, 2, &max_output,
-    //   {}, mkl_shape_max_output); if (std::is_same<Toutput, qint32>::value) {
-    //     // Allowed fusions are (i) BiasAdd and (ii) BiasAdd + Relu. Other
-    //     // activation being non-linear is ill-formed, since min-max are not
-    //     // linear in intermediate output of MatMul.
-    //     OP_REQUIRES(
-    //         ctx,
-    //         (this->fused_ops_.size() == 1) /*BiasAdd*/ ||
-    //             (this->fused_ops_.size() == 2 && this->fused_ops_[1] ==
-    //             "Relu"),
-    //         errors::InvalidArgument("Unsupported fusion."));
-    //     const float min_input =
-    //         ctx->input(kInputIndexMinInput).flat<float>()(0);
-    //     const float max_input =
-    //         ctx->input(kInputIndexMaxInput).flat<float>()(0);
-    //     const float min_weight =
-    //         ctx->input(kInputIndexMinWeight).flat<float>()(0);
-    //     const float max_weight =
-    //         ctx->input(kInputIndexMaxWeight).flat<float>()(0);
-    //     float min_output_value;
-    //     float max_output_value;
-    //     MklQuantizationRangeForMultiplication<T1, T2, qint32>(
-    //         min_input, max_input, min_weight, max_weight, &min_output_value,
-    //         &max_output_value);
-    //     min_output->flat<float>()(0) = min_output_value;
-    //     max_output->flat<float>()(0) = max_output_value;
-    //   } else {
-    //     // When output type is qint8 or quint8, the kernel is registered for
-    //     // Requantize fusion and desired output min-max are inputs to the
-    //     // kernel.
-    //     min_output->flat<float>()(0) =
-    //         ctx->input(kInputIndexMinOutput).flat<float>()(0);
-    //     max_output->flat<float>()(0) =
-    //         ctx->input(kInputIndexMaxOutput).flat<float>()(0);
-    //   }
-    // } else if (std::is_same<Toutput, float>::value) {
-    //   // Kernel is registered for Dequantization fusion. Nothing to do.
-    // } else {
-    //   OP_REQUIRES_OK(ctx, errors::InvalidArgument("Unsupported output
-    //   type"));
-    // }
+    if (std::is_same<Toutput, qint8>::value ||
+        std::is_same<Toutput, quint8>::value ||
+        std::is_same<Toutput, qint32>::value) {
+      OP_REQUIRES(
+          ctx, (this->mode_ == "SCALED"),
+          errors::InvalidArgument("Unsupported fusion."));
+      Tensor* min_output = nullptr;
+      Tensor* max_output = nullptr;
+      MklDnnShape mkl_shape_min_output;
+      MklDnnShape mkl_shape_max_output;
+      mkl_shape_min_output.SetMklTensor(false);
+      mkl_shape_max_output.SetMklTensor(false);
+      AllocateOutputSetMklShape(ctx, 1, &min_output, {},
+      mkl_shape_min_output); AllocateOutputSetMklShape(ctx, 2, &max_output,
+      {}, mkl_shape_max_output); if (std::is_same<Toutput, qint32>::value) {
+        // Allowed fusions are (i) BiasAdd and (ii) BiasAdd + Relu. Other
+        // activation being non-linear is ill-formed, since min-max are not
+        // linear in intermediate output of MatMul.
+        OP_REQUIRES(
+            ctx,
+            (this->fused_ops_.size() == 1) /*BiasAdd*/ ||
+                (this->fused_ops_.size() == 2 && this->fused_ops_[1] ==
+                "Relu"),
+            errors::InvalidArgument("Unsupported fusion."));
+        const float min_input =
+            ctx->input(kInputIndexMinInput).flat<float>()(0);
+        const float max_input =
+            ctx->input(kInputIndexMaxInput).flat<float>()(0);
+        const float min_weight =
+            ctx->input(kInputIndexMinWeight).flat<float>()(0);
+        const float max_weight =
+            ctx->input(kInputIndexMaxWeight).flat<float>()(0);
+        float min_output_value;
+        float max_output_value;
+        MklQuantizationRangeForMultiplication<T1, T2, qint32>(
+            min_input, max_input, min_weight, max_weight, &min_output_value,
+            &max_output_value);
+        min_output->flat<float>()(0) = min_output_value;
+        max_output->flat<float>()(0) = max_output_value;
+      } else {
+        // When output type is qint8 or quint8, the kernel is registered for
+        // Requantize fusion and desired output min-max are inputs to the
+        // kernel.
+        min_output->flat<float>()(0) =
+            ctx->input(kInputIndexMinOutput).flat<float>()(0);
+        max_output->flat<float>()(0) =
+            ctx->input(kInputIndexMaxOutput).flat<float>()(0);
+      }
+    } else if (std::is_same<Toutput, float>::value) {
+      // Kernel is registered for Dequantization fusion. Nothing to do.
+    } else {
+      OP_REQUIRES_OK(ctx, errors::InvalidArgument("Unsupported output type"));
+    }
   }
 
   void ExtendMklDnnMatMulFwdParams(OpKernelContext* ctx,
@@ -442,7 +445,8 @@ class MklQuantizedFusedMatMulOp
           (std::is_same<T1, quint8>::value) ? 255.0f : 127.0f;
       const float max_int8_weight =
           (std::is_same<T2, quint8>::value) ? 255.0f : 127.0f;
-      const float range_input =
+      const float range_input = (mode_ == "MIN_FIRST") ?
+          max_input - min_input :
           std::max(std::abs(min_input), std::abs(max_input));
 
       std::vector<float> scale_output(num_output_channels);
@@ -544,12 +548,14 @@ class MklQuantizedFusedMatMulOp
         (std::is_same<T1, quint8>::value) ? 255.0f : 127.0f;
     const float max_int8_weight =
         (std::is_same<T2, quint8>::value) ? 255.0f : 127.0f;
-    const float range_input =
+    const float range_input = (mode_ == "MIN_FIRST") ?
+        max_input - min_input :
         std::max(std::abs(min_input), std::abs(max_input));
 
     if (this->current_scale_bias_.size() != num_output_channels) {
       this->current_scale_bias_.resize(num_output_channels);
     }
+#pragma omp parallel for schedule(static)
     for (size_t i = 0; i < num_output_channels; ++i) {
       float range_weight =
           std::max(std::abs(min_weight[i]), std::abs(max_weight[i]));
@@ -562,20 +568,8 @@ class MklQuantizedFusedMatMulOp
         this->IsCachedBiasValid()) {
       this->GetCachedBias(ctx, bias_data);
     } else {
-      mkldnn::primitive_attr bias_attr;
-      (num_output_channels == 1)
-          ? bias_attr.set_output_scales(0, this->current_scale_bias_)
-          : bias_attr.set_output_scales(1, this->current_scale_bias_);
-
       void* input_bias_buf = static_cast<void*>(
           const_cast<Tbias*>(bias_tensor.flat<Tbias>().data()));
-      memory::dims input_bias_dims =
-          memory::dims({bias_tensor.shape().dim_size(0)});
-      auto input_bias_md = mkldnn::memory::desc(
-          input_bias_dims, MklDnnType<Tbias>(), memory::format_tag::x);
-      auto input_bias_mem =
-          mkldnn::memory(input_bias_md, this->cpu_engine_, input_bias_buf);
-
       auto scaled_bias_md = matmul_pd->bias_desc();
       TensorShape scaled_bias_shape;
       scaled_bias_shape.AddDim((scaled_bias_md.get_size() / sizeof(Tbias)));
@@ -584,14 +578,54 @@ class MklQuantizedFusedMatMulOp
                                   temp_scaled_bias_tensor));
       void* scaled_bias_buf =
           static_cast<void*>(temp_scaled_bias_tensor->flat<Tbias>().data());
-      auto scaled_bias_mem =
-          mkldnn::memory(scaled_bias_md, this->cpu_engine_, scaled_bias_buf);
+      if (mode_ == "MIN_FIRST") {
+        Tbias* input_bias = (Tbias*) input_bias_buf;
+        Tbias* adjusted_bias = (Tbias*) scaled_bias_buf;
+        float q_min_input = max_int8_input * min_input / range_input;
+        const Tensor& weight_tensor = ctx->input(1);
+        int k = weight_tensor.dim_size(0);
+        int n = weight_tensor.dim_size(1);
+        T2* wt_buf = const_cast<T2*>(weight_tensor.flat<T2>().data());
+        std::vector<float> scale_bias(n);
+        if (this->current_scale_bias_.size() == n) {
+          scale_bias = this->current_scale_bias_;
+        } else {
+          std::fill(scale_bias.begin(), scale_bias.end(),
+                    this->current_scale_bias_[0]);
+        }
+#pragma omp parallel for schedule(static)
+        for (int j = 0; j < n; ++j) {
+          int sum = 0;
+          for (int i = 0; i < k; ++i) {
+            sum += wt_buf[i * n + j];
+          }
+          adjusted_bias[j] =
+              ((input_bias[j] * scale_bias[j]) + static_cast<float>(sum * q_min_input));
+        }
+      }
+      else {
+        mkldnn::primitive_attr bias_attr;
+        (num_output_channels == 1)
+            ? bias_attr.set_output_scales(0, this->current_scale_bias_)
+            : bias_attr.set_output_scales(1, this->current_scale_bias_);
 
-      auto reorder_prim =
-          mkldnn::reorder(input_bias_mem, scaled_bias_mem, bias_attr);
-      std::unordered_map<int, memory> reorder_net_args = {
-          {MKLDNN_ARG_FROM, input_bias_mem}, {MKLDNN_ARG_TO, scaled_bias_mem}};
-      reorder_prim.execute(mkldnn::stream(this->cpu_engine_), reorder_net_args);
+        memory::dims input_bias_dims =
+            memory::dims({bias_tensor.shape().dim_size(0)});
+        auto input_bias_md = mkldnn::memory::desc(
+            input_bias_dims, MklDnnType<Tbias>(), memory::format_tag::x);
+        auto input_bias_mem =
+            mkldnn::memory(input_bias_md, this->cpu_engine_, input_bias_buf);
+
+        auto scaled_bias_mem =
+            mkldnn::memory(scaled_bias_md, this->cpu_engine_, scaled_bias_buf);
+
+        auto reorder_prim =
+            mkldnn::reorder(input_bias_mem, scaled_bias_mem, bias_attr);
+        std::unordered_map<int, memory> reorder_net_args = {
+            {MKLDNN_ARG_FROM, input_bias_mem}, {MKLDNN_ARG_TO, scaled_bias_mem}};
+        reorder_prim.execute(mkldnn::stream(this->cpu_engine_), reorder_net_args);
+      }
+
       *bias_data = temp_scaled_bias_tensor->flat<Tbias>().data();
 
       // Caching is expensive, so cache only once.
@@ -626,6 +660,7 @@ class MklQuantizedFusedMatMulOp
   const int kInputIndexMinOutput = 7;
   const int kInputIndexMaxOutput = 8;
 
+  string mode_;
   std::vector<float> fixed_scale_bias_ = std::vector<float>(1, 1.0f);
 
   // Set to a value such that difference with fixed is > 1e-5.

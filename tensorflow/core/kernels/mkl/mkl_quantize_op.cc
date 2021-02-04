@@ -380,6 +380,7 @@ class MklQuantizeV2Op : public OpKernel {
                                            &min_shifted_input_tensor));
     if (mode_ == QUANTIZE_MODE_MIN_FIRST) {
       auto minfirst_input = min_shifted_input_tensor.flat<float>().data();
+#ifdef ENABLE_MKLDNN_THREADPOOL
       const Eigen::TensorOpCost cost(
           sizeof(float), /*load bytes*/
           sizeof(float), /*saved bytes*/
@@ -392,7 +393,15 @@ class MklQuantizeV2Op : public OpKernel {
         }
       };
       d.parallelFor(input.NumElements(), cost, ParallelSub);
-
+#else
+      // Offset to be added instead of subtracted so that simd vector
+      // instruction `vaddps` is used instead of `vsubps`. There are more
+      // ports for vector add instruction than vector sub instruction.
+      float offset = -min_range;
+#pragma omp parallel for simd schedule(static)
+      for (size_t i = 0; i < input.NumElements(); ++i)
+        minfirst_input[i] = flat_input[i] + offset;
+#endif  // ENABLE_MKLDNN_THREADPOOL
       src.SetUsrMem(src_md, &min_shifted_input_tensor);
     } else {
       src.SetUsrMem(src_md, &src_tensor);
