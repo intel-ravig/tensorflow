@@ -96,4 +96,6 @@ bazel test \
     -- \
     //tensorflow/... \
     -//tensorflow/compiler/... \
-    -//tensorflow/lite/...
+    -//tensorflow/lite/... \
+    -//tensorflow/core/common_runtime:mkl_layout_pass_test \
+    -//tensorflow/core/common_runtime:mkl_tfconversion_pass_test
