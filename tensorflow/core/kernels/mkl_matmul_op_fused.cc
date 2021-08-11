@@ -35,8 +35,11 @@ class MklFusedMatMulOp : public MklDnnMatMulOpBase<T, T> {
     OP_REQUIRES_OK(ctx, ctx->GetAttr("fused_ops", &fused_ops_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("transpose_a", &transpose_a_));
     OP_REQUIRES_OK(ctx, ctx->GetAttr("transpose_b", &transpose_b_));
-    OP_REQUIRES_OK(ctx,
-                   ctx->GetAttr("is_filter_const", &(this->is_weight_const_)));
+
+    if (ctx->HasAttr("is_filter_const")) {
+      OP_REQUIRES_OK(
+          ctx, ctx->GetAttr("is_filter_const", &(this->is_weight_const_)));
+    }
 
     OP_REQUIRES(ctx, fused_ops_.size() <= 2,
                 errors::InvalidArgument(
@@ -57,16 +60,8 @@ class MklFusedMatMulOp : public MklDnnMatMulOpBase<T, T> {
     const Tensor& weight_tensor = ctx->input(this->kInputIndexWeight);
     const Tensor& bias_tensor = MklGetInput(ctx, this->kInputIndexBias);
 
-    MklDnnShape src_mkl_shape;
-    MklDnnShape weight_mkl_shape;
-    GetMklShape(ctx, this->kInputIndexSrc, &src_mkl_shape);
-    GetMklShape(ctx, this->kInputIndexWeight, &weight_mkl_shape);
-    OP_REQUIRES(ctx, !weight_mkl_shape.IsMklTensor(),
-                errors::InvalidArgument("Weight should not be in MKL Layout"));
-
     // Get shapes of input tensors
-    auto src_tf_shape = src_mkl_shape.IsMklTensor() ? src_mkl_shape.GetTfShape()
-                                                    : src_tensor.shape();
+    auto src_tf_shape = src_tensor.shape();
     auto weight_tf_shape = weight_tensor.shape();
 
     // Check the constraint of input matrix and bias
@@ -135,31 +130,23 @@ class MklFusedMatMulOp : public MklDnnMatMulOpBase<T, T> {
     // And the shape of AddOp is also the same with output's shape.
     auto dst_pd = matmul_pd->PRIMITIVE_DESC_DST;
 
-    MklDnnShape output_mkl_shape;
-    output_mkl_shape.SetMklTensor(false);
-
     TensorShape output_tf_shape({batch, channel});
 
     if (fuse_add_) {
       const Tensor& add_tensor = MklGetInput(ctx, kInputIndex_Add);
-      MklDnnShape add_mkl_shape;
-      GetMklShape(ctx, kInputIndex_Add, &add_mkl_shape);
 
-      if (ForwardMklTensorInToOutWithMklShape(ctx, kInputIndex_Add,
-                                              kOutputIndex_Dst, &dst_tensor,
-                                              output_mkl_shape, false)) {
+      if (ctx->forward_input_to_output_with_shape(
+              kInputIndex_Add, kOutputIndex_Dst, output_tf_shape,
+              &dst_tensor)) {
         ;  // If it's not native format, need to forward and set meta first
       } else {
         // If forward is not successful, we should use reorder to copy add
         // tensor to dst tensor
-        AllocateOutputSetMklShape(ctx, kOutputIndex_Dst, &dst_tensor,
-                                  output_tf_shape, output_mkl_shape);
+        ctx->allocate_output(kOutputIndex_Dst, output_tf_shape, &dst_tensor);
         auto output_format_tag =
             MklTensorFormatToMklDnnDataFormat(MKL_TENSOR_FORMAT_NC);
         auto add_md =
-            add_mkl_shape.IsMklTensor()
-                ? add_mkl_shape.GetMklLayout()
-                : memory::desc(dst_dims, MklDnnType<T>(), output_format_tag);
+            memory::desc(dst_dims, MklDnnType<T>(), output_format_tag);
         auto dst_md =
             memory::desc(dst_dims, MklDnnType<T>(), output_format_tag);
 
@@ -178,8 +165,7 @@ class MklFusedMatMulOp : public MklDnnMatMulOpBase<T, T> {
                                 this->cpu_engine_, ctx);
       }
     } else {
-      AllocateOutputSetMklShape(ctx, 0, &dst_tensor, output_tf_shape,
-                                output_mkl_shape);
+      ctx->allocate_output(kOutputIndex_Dst, output_tf_shape, &dst_tensor);
     }
 
     // if there's nothing to compute, just return.
@@ -198,9 +184,7 @@ class MklFusedMatMulOp : public MklDnnMatMulOpBase<T, T> {
       MklDnnData<T> src_mkl(&(this->cpu_engine_));
       MklDnnData<T> weight_mkl(&(this->cpu_engine_));
 
-      auto src_md = src_mkl_shape.IsMklTensor()
-                        ? src_mkl_shape.GetMklLayout()
-                        : memory::desc(src_dims, MklDnnType<T>(), src_format);
+      auto src_md = memory::desc(src_dims, MklDnnType<T>(), src_format);
 
       if (IS_SRC_REORDER_NEEDED(src_md, matmul_pd, matmul_prim)) {
         src_mkl.SetUsrMem(src_md, src_data);
@@ -300,15 +284,21 @@ class MklFusedMatMulOp : public MklDnnMatMulOpBase<T, T> {
 };
 
 // Register mkl kernels for supported operations and types.
-#define REGISTER_FUSEDMATMUL_MKL_SUPPORTED_KERNELS_TYPES(type) \
-  REGISTER_KERNEL_BUILDER(                                     \
-      Name("_MklFusedMatMul")                                  \
-          .Device(DEVICE_CPU)                                  \
-          .TypeConstraint<type>("T")                           \
-          .Label(mkl_op_registry::kMklLayoutDependentOpLabel), \
-      MklFusedMatMulOp<CPUDevice, type>);
+#define REGISTER_FUSEDMATMUL_MKL_SUPPORTED_KERNELS_TYPES(type)                \
+  REGISTER_KERNEL_BUILDER(Name("_MklFusedMatMul")                             \
+                              .Device(DEVICE_CPU)                             \
+                              .TypeConstraint<type>("T")                      \
+                              .Label(mkl_op_registry::kMklNameChangeOpLabel), \
+                          MklFusedMatMulOp<CPUDevice, type>);
 TF_CALL_float(REGISTER_FUSEDMATMUL_MKL_SUPPORTED_KERNELS_TYPES);
 TF_CALL_bfloat16(REGISTER_FUSEDMATMUL_MKL_SUPPORTED_KERNELS_TYPES);
+
+#define REGISTER_FUSEDMATMUL_EIGEN_SUPPORTED_KERNELS_TYPES(type)         \
+  REGISTER_KERNEL_BUILDER(                                               \
+      Name("_FusedMatMul").Device(DEVICE_CPU).TypeConstraint<type>("T"), \
+      MklFusedMatMulOp<CPUDevice, type>);
+TF_CALL_float(REGISTER_FUSEDMATMUL_EIGEN_SUPPORTED_KERNELS_TYPES);
+TF_CALL_bfloat16(REGISTER_FUSEDMATMUL_EIGEN_SUPPORTED_KERNELS_TYPES);
 
 }  // namespace tensorflow
 

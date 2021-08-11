@@ -580,10 +580,13 @@ struct MatMulFunctor<SYCLDevice, T> {
                               .Label("cublas"),                    \
                           MatMulOp<GPUDevice, T, true /* cublas */>)
 
+#ifndef INTEL_MKL
 TF_CALL_float(REGISTER_CPU);
+TF_CALL_bfloat16(REGISTER_CPU);
+#endif  // INTEL_MKL
+
 TF_CALL_double(REGISTER_CPU);
 TF_CALL_half(REGISTER_CPU);
-TF_CALL_bfloat16(REGISTER_CPU);
 TF_CALL_int32(REGISTER_CPU);
 TF_CALL_int64(REGISTER_CPU);
 TF_CALL_complex64(REGISTER_CPU);

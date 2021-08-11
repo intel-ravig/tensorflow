@@ -230,9 +230,22 @@ class MklMatMulOp : public OpKernel {
 // TODO(inteltf) Consider template specialization when adding/removing
 // additional types
 TF_CALL_float(REGISTER_CPU);
-#ifdef ENABLE_INTEL_MKL_BFLOAT16
 TF_CALL_bfloat16(REGISTER_CPU);
-#endif  // ENABLE_INTEL_MKL_BFLOAT16
+
+#define REGISTER_CPU_EIGEN(T)                                                  \
+  REGISTER_KERNEL_BUILDER(                                                     \
+      Name("MatMul").Device(DEVICE_CPU).TypeConstraint<T>("T").Label("eigen"), \
+      MklMatMulOp<CPUDevice, T, false>);
+
+#define REGISTER_CPU_REWRITE(T)                                 \
+  REGISTER_KERNEL_BUILDER(                                      \
+      Name("MatMul").Device(DEVICE_CPU).TypeConstraint<T>("T"), \
+      MklMatMulOp<CPUDevice, T, false>);                        \
+  REGISTER_CPU_EIGEN(T);
+
+TF_CALL_float(REGISTER_CPU_REWRITE);
+TF_CALL_bfloat16(REGISTER_CPU_REWRITE);
+
 #endif  // ENABLE_MKL
 }  // namespace tensorflow
 #endif  // INTEL_MKL

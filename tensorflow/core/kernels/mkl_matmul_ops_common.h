@@ -562,7 +562,7 @@ class MklDnnMatMulOpBase : public OpKernel {
   PersistentTensor weight_oi_ GUARDED_BY(mu_);
   PersistentTensor weight_oi_md_ GUARDED_BY(mu_);
 
-  bool is_weight_const_;
+  bool is_weight_const_ = false;
 
   const int kInputIndexSrc = 0;
   const int kInputIndexWeight = 1;
