@@ -160,11 +160,20 @@ class MklMatMulOp : public OpKernel {
     char char_transb = transb ? 'T' : 'N';
     VLOG(2) << "MKL DNN SGEMM called";
 #ifdef ENABLE_MKLDNN_THREADPOOL
-    auto eigen_tp =
-        MklDnnThreadPoolWrapper::GetInstance().CreateThreadPoolPtr(ctx);
-
-    dnnl_sgemm_tp(char_transa, char_transb, m, n, k, alpha, a, lda, b, ldb,
-                  beta, c, ldc, eigen_tp);
+    MklDnnThreadPool eigen_tp(ctx);
+    // With threadpool , the runtime overhead is comparable to the kernel
+    // execution for small kernel sizes. For such sizes, it may be better to run
+    // the kernel single threaded. Here we are coming up with a cost model based
+    // on L1 sizes. If we find that matrices are small enough, we will execute
+    // single threaded. This may need tuning.
+    if (ExecuteSingleThreadedGemm(m, n, k)) {
+      // For now, call single-threaded gemm.
+      dnnl_sgemm_tp(char_transa, char_transb, m, n, k, alpha, a, lda, b, ldb,
+                    beta, c, ldc, nullptr);
+    } else {
+      dnnl_sgemm_tp(char_transa, char_transb, m, n, k, alpha, a, lda, b, ldb,
+                    beta, c, ldc, &eigen_tp);
+    }
 #else
     dnnl_sgemm(char_transa, char_transb, m, n, k, alpha, a, lda, b, ldb, beta,
                c, ldc);

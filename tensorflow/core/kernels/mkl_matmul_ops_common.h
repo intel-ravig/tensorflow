@@ -34,7 +34,18 @@ using mkldnn::stream;
 
 namespace tensorflow {
 
+#define L1_SIZE 32 * 1024
 typedef Eigen::ThreadPoolDevice CPUDevice;
+
+inline bool ExecuteSingleThreadedGemm(int m, int n, int k) {
+  // Ideally we would like to determine blocking and then come up with
+  // a heuristic but what we are targeting are very small models whose
+  // total size is < few L1's. So we will do this simple calculation
+  // to determine if the matrix multiplication should be run on a single thread.
+  constexpr int kHeuristicMultiplier = 8;
+  return ((sizeof(float) * (m * n + k * (m + n))) <
+          L1_SIZE * kHeuristicMultiplier);
+}
 
 // This structure aggregates multiple inputs to MklDnnMatMul* methods.
 struct MklDnnMatMulFwdParams {
@@ -812,7 +823,8 @@ void dnnl_gemm(char transa, char transb, int64_t m, int64_t n, int64_t k,
 
   // Execute matmul primitive.
   std::shared_ptr<stream> cpu_stream;
-  cpu_stream.reset(CreateStream(ctx, matmul_prim->GetEngine()));
+  MklDnnThreadPool eigen_tp(ctx);
+  cpu_stream.reset(CreateStream(&eigen_tp, matmul_prim->GetEngine()));
   matmul_prim->Execute(a, b, c, cpu_stream);
 
   if (do_not_cache) delete matmul_prim;

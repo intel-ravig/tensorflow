@@ -2163,3 +2163,14 @@
 +}  // end namespace Eigen
 +
 +#endif  // EIGEN_SPECIALFUNCTIONS_BFLOAT16_H
+--- a/unsupported/Eigen/CXX11/src/Tensor/TensorDeviceThreadPool.h
++++ b/unsupported/Eigen/CXX11/src/Tensor/TensorDeviceThreadPool.h
+@@ -340,7 +340,7 @@
+       const Index n, const TensorOpCost& cost,
+       std::function<Index(Index)> block_align) const {
+     const double block_size_f = 1.0 / CostModel::taskSize(1, cost);
+-    const Index max_oversharding_factor = 4;
++    const Index max_oversharding_factor = 1;
+     Index block_size = numext::mini(
+         n, numext::maxi<Index>(
+                divup<Index>(n, max_oversharding_factor * numThreads()),
