@@ -275,14 +275,13 @@ class MklDnnMatMulFwdPrimitive : public MklPrimitive {
           float op_scale = post_op_param.param[0];
           post_ops.append_sum(op_scale);
         } else {
-          DCHECK((post_op_param.name == "relu") ||
-                 (post_op_param.name == "relu6") ||
-                 (post_op_param.name == "elu") ||
-                 (post_op_param.name == "gelu") ||
-                 (post_op_param.name == "gelu_erf") ||
-                 (post_op_param.name == "sum") ||
-                 (post_op_param.name == "tanh") ||
-                 (post_op_param.name == "output_scale"));
+          DCHECK(
+              (post_op_param.name == "relu") ||
+              (post_op_param.name == "relu6") ||
+              (post_op_param.name == "elu") || (post_op_param.name == "gelu") ||
+              (post_op_param.name == "gelu_erf") ||
+              (post_op_param.name == "sum") || (post_op_param.name == "tanh") ||
+              (post_op_param.name == "output_scale"));
         }
       }
       post_ops_attr.set_post_ops(post_ops);
@@ -805,15 +804,18 @@ void dnnl_gemm(char transa, char transb, int64_t m, int64_t n, int64_t k,
   DCHECK_EQ(alpha, 1.0f);
   DCHECK_EQ(beta, 0.f);
 
+  bool do_not_cache = MklPrimitiveFactory<T>::IsPrimitiveMemOptEnabled();
   MklMatMulParams params(a_dims, b_dims, c_dims, a_strides, b_strides,
                          c_strides);
   MklMatMulPrimitive<T>* matmul_prim =
-      MklMatMulPrimitiveFactory<T>::Get(params, 0);
+      MklMatMulPrimitiveFactory<T>::Get(params, do_not_cache);
 
   // Execute matmul primitive.
   std::shared_ptr<stream> cpu_stream;
   cpu_stream.reset(CreateStream(ctx, matmul_prim->GetEngine()));
   matmul_prim->Execute(a, b, c, cpu_stream);
+
+  if (do_not_cache) delete matmul_prim;
 }
 
 }  // anonymous namespace

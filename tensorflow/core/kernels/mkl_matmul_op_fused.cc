@@ -120,8 +120,10 @@ class MklFusedMatMulOp : public MklDnnMatMulOpBase<T, T> {
 
     // Extend the basic parameters for data types and fusions.
     ExtendMklDnnMatMulFwdParams(ctx, matmul_params);
+    bool do_not_cache = MklPrimitiveFactory<T>::IsPrimitiveMemOptEnabled();
     MklDnnMatMulFwdPrimitive<T, T, T, T, T>* matmul_prim =
-        MklDnnMatMulFwdPrimitiveFactory<T, T, T, T, T>::Get(matmul_params, 0);
+        MklDnnMatMulFwdPrimitiveFactory<T, T, T, T, T>::Get(matmul_params,
+                                                            do_not_cache);
 
     // Allocate output tensor.
     Tensor* dst_tensor = nullptr;
@@ -249,6 +251,8 @@ class MklFusedMatMulOp : public MklDnnMatMulOpBase<T, T> {
       // Execute fused matmul op.
       matmul_prim->Execute(src_data, weight_data, bias_data, dst_data,
                            cpu_stream);
+
+      if (do_not_cache) delete matmul_prim;
     } catch (mkldnn::error& e) {
       string error_msg = "Status: " + std::to_string(e.status) +
                          ", message: " + string(e.message) + ", in file " +
