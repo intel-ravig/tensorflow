@@ -823,10 +823,15 @@ void dnnl_gemm(char transa, char transb, int64_t m, int64_t n, int64_t k,
 
   // Execute matmul primitive.
   std::shared_ptr<stream> cpu_stream;
-  MklDnnThreadPool eigen_tp(ctx);
-  cpu_stream.reset(CreateStream(&eigen_tp, matmul_prim->GetEngine()));
-  matmul_prim->Execute(a, b, c, cpu_stream);
-
+  if (ExecuteSingleThreadedGemm(m, n, k)) {
+    MklDnnThreadPool eigen_tp(ctx, 1);
+    cpu_stream.reset(CreateStream(&eigen_tp, matmul_prim->GetEngine()));
+    matmul_prim->Execute(a, b, c, cpu_stream);
+  } else {
+    MklDnnThreadPool eigen_tp(ctx);
+    cpu_stream.reset(CreateStream(&eigen_tp, matmul_prim->GetEngine()));
+    matmul_prim->Execute(a, b, c, cpu_stream);
+  }
   if (do_not_cache) delete matmul_prim;
 }
 
