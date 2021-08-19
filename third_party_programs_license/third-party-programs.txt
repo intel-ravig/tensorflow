@@ -2204,7 +2204,7 @@ OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 The following third party programs have their own third party program files. These additional third party program files are as follows:
 
 1. Intel® Math Kernel Library (Intel® MKL): ./third_party_programs_license/oneDNN-THIRD-PARTY-PROGRAMS
-2. Intel® Optimization for TensorFlow*(Intel tensorflow): ./third_party_programs_license/iotf-third-party-programs.txt
+2. Intel® Optimization for TensorFlow*(Intel tensorflow): ./third_party_programs_license/third-party-programs.txt
 
 
 ---------------------------------------------------------------------------------------------------------------------
