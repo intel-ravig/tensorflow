@@ -89,7 +89,7 @@ REGISTER_OP("_MklQuantizedConcatV2")
     });
 
 REGISTER_OP("_MklQuantizeV2")
-    .Input("input: float")
+    .Input("input: dtype")
     .Input("min_range: float")
     .Input("max_range: float")
     .Input("mkl_input: uint8")
@@ -109,6 +109,7 @@ REGISTER_OP("_MklQuantizeV2")
     .Attr("narrow_range: bool = false")
     .Attr("axis: int = -1")
     .Attr("ensure_minimum_range: float = 0.01")
+    .Attr("dtype: {bfloat16, float} = DT_FLOAT")
     .SetShapeFn([](InferenceContext* c) {
       int axis = -1;
       Status s = c->GetAttr("axis", &axis);

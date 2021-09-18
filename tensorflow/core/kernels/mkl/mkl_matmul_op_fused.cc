@@ -327,11 +327,11 @@ class MklFusedMatMulOp : public MklDnnMatMulOpBase<T2, Tbias, Toutput> {
 
  protected:
   std::vector<string> fused_ops_;
+  bool transpose_a_;
+  bool transpose_b_;
 
  private:
   bool fuse_add_ = false;
-  bool transpose_a_;
-  bool transpose_b_;
   float leakyrelu_alpha = 0.2;
   int kInputIndex_Add = 3;
   const int kOutputIndex_Dst = 0;
@@ -595,7 +595,7 @@ class MklQuantizedFusedMatMulOp
         // Scales needs to expanded to number of output channels by the values
         // of bias_scales.
         std::vector<float> scales(n);
-        if (scales.size() != n)  // weights quanitzed per_tensor
+        if (num_weight_scales == 1)  // weights quanitzed per_tensor
           std::fill(scales.begin(), scales.end(), bias_scales[0]);
         else
           scales = bias_scales;  // Expensive copy

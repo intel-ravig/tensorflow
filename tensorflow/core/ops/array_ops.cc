@@ -2948,7 +2948,7 @@ REGISTER_OP("QuantizeAndDequantizeV3")
     });
 
 REGISTER_OP("QuantizeV2")
-    .Input("input: float")
+    .Input("input: dtype")
     .Input("min_range: float")
     .Input("max_range: float")
     .Output("output: T")
@@ -2962,6 +2962,7 @@ REGISTER_OP("QuantizeV2")
     .Attr("narrow_range: bool = false")
     .Attr("axis: int = -1")
     .Attr("ensure_minimum_range: float = 0.01")
+    .Attr("dtype: {bfloat16, float} = DT_FLOAT")
     .SetShapeFn([](InferenceContext* c) {
       int axis = -1;
       Status s = c->GetAttr("axis", &axis);
