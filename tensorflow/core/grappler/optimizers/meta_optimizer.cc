@@ -324,6 +324,10 @@ Status MetaOptimizer::InitializeOptimizers(
   if (BOTH_ARE_ON(pin_to_host_optimization)) {
     optimizers->push_back(MakeUnique<PinToHostOptimizer>());
   }
+  if (BOTH_NOT_OFF(remapping)) {
+    optimizers->push_back(
+        MakeUnique<Remapper>(cfg_.remapping(), xla_auto_clustering_on_));
+  }
   if (BOTH_NOT_OFF(arithmetic_optimization)) {
     optimizers->push_back(
         MakeUnique<ArithmeticOptimizer>(cfg_.arithmetic_optimization()));
@@ -332,10 +336,6 @@ Status MetaOptimizer::InitializeOptimizers(
     optimizers->push_back(MakeUnique<GenericLayoutOptimizer>(
         /*optimization level*/ cfg_.layout_optimizer(),
         /*CPU layout conversion*/ cfg_.cpu_layout_conversion()));
-  }
-  if (BOTH_NOT_OFF(remapping)) {
-    optimizers->push_back(
-        MakeUnique<Remapper>(cfg_.remapping(), xla_auto_clustering_on_));
   }
   if (BOTH_NOT_OFF(loop_optimization)) {
     optimizers->push_back(

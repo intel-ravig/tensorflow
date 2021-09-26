@@ -238,14 +238,14 @@ class MklDnnMatMulFwdPrimitive : public MklPrimitive {
           float op_scale = post_op_param.param[0];
           float op_alpha = post_op_param.param[1];
           float op_beta = post_op_param.param[2];
-          post_ops.append_eltwise(op_scale, ALGORITHM::eltwise_gelu_tanh,
+          post_ops.append_eltwise(op_scale, mkldnn::algorithm::eltwise_gelu_tanh,
                                   op_alpha, op_beta);
         } else if (post_op_param.name == "gelu_exact") {
           DCHECK_EQ(post_op_param.param.size(), 3);
           float op_scale = post_op_param.param[0];
           float op_alpha = post_op_param.param[1];
           float op_beta = post_op_param.param[2];
-          post_ops.append_eltwise(op_scale, ALGORITHM::eltwise_gelu_erf,
+          post_ops.append_eltwise(op_scale, mkldnn::algorithm::eltwise_gelu_erf,
                                   op_alpha, op_beta);
         } else if (post_op_param.name == "tanh") {
           DCHECK_EQ(post_op_param.param.size(), 3);
@@ -381,7 +381,15 @@ class MklDnnMatMulFwdPrimitiveFactory : public MklPrimitiveFactory<T> {
         key_creator.AddAsKey(post_op_param.param[0]);
       } else if (post_op_param.name == "output_scale") {
         key_creator.AddAsKey(post_op_param.name);
-        key_creator.AddAsKey(post_op_param.partial_key);
+        if (post_op_param.partial_key.empty()) {
+          DCHECK_EQ(post_op_param.param.size(), 1);
+          // Old Quantized MatMul kernels do not create part of key beforehand
+          // as primitive caching-key-creation optimization.
+          key_creator.AddAsKey(post_op_param.param[0]);
+        } else {
+          // New Quantized MatMul kernels pre-create partial key.
+          key_creator.AddAsKey(post_op_param.partial_key);
+        }
       } else {
         return string("not_a_key");
       }

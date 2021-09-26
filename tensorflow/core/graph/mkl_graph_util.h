@@ -99,7 +99,7 @@ bool inline NativeFormatEnabled() {
   static absl::once_flag once;
   absl::call_once(once, [&] {
     TF_CHECK_OK(ReadBoolFromEnvVar("TF_ENABLE_MKL_NATIVE_FORMAT",
-                                   /*default_value*/ true,
+                                   /*default_value*/ false,
                                    &native_fmt_enabled));
   });
   return native_fmt_enabled;

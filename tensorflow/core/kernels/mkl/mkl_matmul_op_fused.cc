@@ -124,7 +124,7 @@ class MklFusedMatMulOp : public MklDnnMatMulOpBase<T2, Tbias, Toutput> {
     //   2. var, keep the original format to avoid reordering.
     MklDnnMatMulFwdParams matmul_params(src_dims, weight_dims, bias_dims,
                                         dst_dims, src_format,
-                                        MEMORY_FORMAT::any, MEMORY_FORMAT::nc);
+                                        memory::format_tag::any, memory::format_tag::nc);
 
     // Extend the basic parameters for data types and fusions.
     ExtendMklDnnMatMulFwdParams(ctx, matmul_params);
@@ -146,7 +146,10 @@ class MklFusedMatMulOp : public MklDnnMatMulOpBase<T2, Tbias, Toutput> {
     TensorShape output_tf_shape({batch, channel});
 
     if (fuse_add_) {
-      kInputIndex_Add = ctx->num_inputs() / 2 - 1;
+      if (native_format)
+        kInputIndex_Add = ctx->num_inputs() - 1;
+      else
+        kInputIndex_Add = ctx->num_inputs()/2 - 1;
       const Tensor& add_tensor = MklGetInput(ctx, kInputIndex_Add);
       MklDnnShape add_mkl_shape;
       GetMklShape(ctx, kInputIndex_Add, &add_mkl_shape, native_format);
@@ -170,20 +173,21 @@ class MklFusedMatMulOp : public MklDnnMatMulOpBase<T2, Tbias, Toutput> {
             MklTensorFormatToMklDnnDataFormat(MklTensorFormat::FORMAT_NC);
         auto add_md = add_mkl_shape.IsMklTensor()
                           ? add_mkl_shape.GetMklLayout()
-                          : memory::desc(dst_dims, MklDnnType<Tbias>(),
+                          : memory::desc(dst_dims, MklDnnType<Toutput>(),
                                          output_format_tag);
         auto dst_md =
             memory::desc(dst_dims, MklDnnType<Tbias>(), output_format_tag);
 
         void* add_buf = static_cast<void*>(
-            const_cast<Tbias*>(add_tensor.flat<Tbias>().data()));
-        void* dst_buf = static_cast<void*>((dst_tensor)->flat<Tbias>().data());
+            const_cast<Toutput*>(add_tensor.flat<Toutput>().data()));
+        void* dst_buf =
+            static_cast<void*>((dst_tensor)->flat<Toutput>().data());
 
         if (native_format) {
           // We are simply deep copying the add_tensor to dst_tensor without
           // changing memory layout, hence using same memory descriptor.
           add_md = dst_md =
-              memory::desc({add_tensor.NumElements()}, MklDnnType<Tbias>(),
+              memory::desc({add_tensor.NumElements()}, MklDnnType<Toutput>(),
                            mkldnn::memory::format_tag::x);
         }
 
@@ -353,18 +357,15 @@ class MklQuantizedFusedMatMulOp
     if (std::is_same<Toutput, qint8>::value ||
         std::is_same<Toutput, quint8>::value ||
         std::is_same<Toutput, qint32>::value) {
-      OP_REQUIRES(
-          ctx, (this->mode_ == "SCALED"),
-          errors::InvalidArgument("Unsupported fusion."));
       Tensor* min_output = nullptr;
       Tensor* max_output = nullptr;
       MklDnnShape mkl_shape_min_output;
       MklDnnShape mkl_shape_max_output;
       mkl_shape_min_output.SetMklTensor(false);
       mkl_shape_max_output.SetMklTensor(false);
-      AllocateOutputSetMklShape(ctx, 1, &min_output, {},
-      mkl_shape_min_output); AllocateOutputSetMklShape(ctx, 2, &max_output,
-      {}, mkl_shape_max_output); if (std::is_same<Toutput, qint32>::value) {
+      AllocateOutputSetMklShape(ctx, 1, &min_output, {}, mkl_shape_min_output);
+      AllocateOutputSetMklShape(ctx, 2, &max_output, {}, mkl_shape_max_output);
+      if (std::is_same<Toutput, qint32>::value) {
         // Allowed fusions are (i) BiasAdd and (ii) BiasAdd + Relu. Other
         // activation being non-linear is ill-formed, since min-max are not
         // linear in intermediate output of MatMul.
@@ -471,7 +472,12 @@ class MklQuantizedFusedMatMulOp
             for (size_t i = 0; i < scale_output.size(); ++i) {
               scale_output[i] = scale_output[i] * (127.0f / range_output);
             }
-            params.post_op_params.push_back({"output_scale", scale_output});
+            FactoryKeyCreator partial_key;
+            partial_key.AddAsKey<float>(range_input);
+            partial_key.AddAsKey<const float*>(min_weight);
+            partial_key.AddAsKey<const float*>(max_weight);
+            params.post_op_params.push_back(
+                {"output_scale", scale_output, partial_key.GetKey()});
             return;
           }
           scale_post_op = 127.0f / range_output;
