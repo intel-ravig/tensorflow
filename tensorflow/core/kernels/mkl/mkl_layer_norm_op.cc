@@ -52,7 +52,6 @@ class MklLayerNormOp : public OpKernel {
       OP_REQUIRES(ctx, shift_tensor.dims() == 1,
                   errors::InvalidArgument("offset must be 1D tensor",
                                           shift_tensor.shape().DebugString()));
-      ctx->set_output(0, src_tensor);
 
       auto cpu_engine = engine(engine::kind::cpu, 0);
       auto engine_stream = stream(cpu_engine);
@@ -89,12 +88,19 @@ class MklLayerNormOp : public OpKernel {
       std::memcpy(scale_shift_buf + sizeof(T) * scale_tensor.dim_size(0),
                   shift_buf, sizeof(T) * shift_tensor.dim_size(0));
 
+      // dst memory
+      Tensor* output_tensor = nullptr;
+      OP_REQUIRES_OK(ctx, ctx->forward_input_or_allocate_output(
+          {0}, 0, src_tensor.shape(), &output_tensor));
+      void* dst_buf = static_cast<void*>(const_cast<T*>(output_tensor->flat<T>().data()));
+      auto dst_mem = memory(src_md, cpu_engine, dst_buf);
+
       std::unordered_map<int, memory> lnorm_args;
       lnorm_args.insert({DNNL_ARG_SRC, src_mem});
       lnorm_args.insert({DNNL_ARG_MEAN, mean_mem});
       lnorm_args.insert({DNNL_ARG_VARIANCE, variance_mem});
       lnorm_args.insert({DNNL_ARG_SCALE_SHIFT, scale_shift_mem});
-      lnorm_args.insert({DNNL_ARG_DST, src_mem});
+      lnorm_args.insert({DNNL_ARG_DST, dst_mem});
       lnorm_prim.execute(engine_stream, lnorm_args);
     } catch (mkldnn::error& e) {
       string error_msg = "Status: " + std::to_string(e.status) +
