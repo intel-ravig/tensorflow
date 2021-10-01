@@ -122,9 +122,9 @@ class MklFusedMatMulOp : public MklDnnMatMulOpBase<T2, Tbias, Toutput> {
     // Set weight format for primitive:
     //   1. const, let MKL-DNN determine format because it will be cached;
     //   2. var, keep the original format to avoid reordering.
-    MklDnnMatMulFwdParams matmul_params(src_dims, weight_dims, bias_dims,
-                                        dst_dims, src_format,
-                                        memory::format_tag::any, memory::format_tag::nc);
+    MklDnnMatMulFwdParams matmul_params(
+        src_dims, weight_dims, bias_dims, dst_dims, src_format,
+        memory::format_tag::any, memory::format_tag::nc);
 
     // Extend the basic parameters for data types and fusions.
     ExtendMklDnnMatMulFwdParams(ctx, matmul_params);
@@ -149,7 +149,7 @@ class MklFusedMatMulOp : public MklDnnMatMulOpBase<T2, Tbias, Toutput> {
       if (native_format)
         kInputIndex_Add = ctx->num_inputs() - 1;
       else
-        kInputIndex_Add = ctx->num_inputs()/2 - 1;
+        kInputIndex_Add = ctx->num_inputs() / 2 - 1;
       const Tensor& add_tensor = MklGetInput(ctx, kInputIndex_Add);
       MklDnnShape add_mkl_shape;
       GetMklShape(ctx, kInputIndex_Add, &add_mkl_shape, native_format);
@@ -372,8 +372,7 @@ class MklQuantizedFusedMatMulOp
         OP_REQUIRES(
             ctx,
             (this->fused_ops_.size() == 1) /*BiasAdd*/ ||
-                (this->fused_ops_.size() == 2 && this->fused_ops_[1] ==
-                "Relu"),
+                (this->fused_ops_.size() == 2 && this->fused_ops_[1] == "Relu"),
             errors::InvalidArgument("Unsupported fusion."));
         const float min_input =
             ctx->input(kInputIndexMinInput).flat<float>()(0);
@@ -446,9 +445,10 @@ class MklQuantizedFusedMatMulOp
           (std::is_same<T1, quint8>::value) ? 255.0f : 127.0f;
       const float max_int8_weight =
           (std::is_same<T2, quint8>::value) ? 255.0f : 127.0f;
-      const float range_input = (mode_ == "MIN_FIRST") ?
-          max_input - min_input :
-          std::max(std::abs(min_input), std::abs(max_input));
+      const float range_input =
+          (mode_ == "MIN_FIRST")
+              ? max_input - min_input
+              : std::max(std::abs(min_input), std::abs(max_input));
 
       std::vector<float> scale_output(num_output_channels);
       for (size_t i = 0; i < num_output_channels; ++i) {
@@ -548,30 +548,12 @@ class MklQuantizedFusedMatMulOp
     const Tensor& max_weight_tensor = ctx->input(kInputIndexMaxWeight);
     const float* min_weight = min_weight_tensor.flat<float>().data();
     const float* max_weight = max_weight_tensor.flat<float>().data();
-    const size_t num_output_channels = min_weight_tensor.NumElements();
 
-    const float max_int8_input =
-        (std::is_same<T1, quint8>::value) ? 255.0f : 127.0f;
-    const float max_int8_weight =
-        (std::is_same<T2, quint8>::value) ? 255.0f : 127.0f;
-    const float range_input = (mode_ == "MIN_FIRST") ?
-        max_input - min_input :
-        std::max(std::abs(min_input), std::abs(max_input));
-
-    if (this->current_scale_bias_.size() != num_output_channels) {
-      this->current_scale_bias_.resize(num_output_channels);
-    }
-#pragma omp parallel for schedule(static)
-    for (size_t i = 0; i < num_output_channels; ++i) {
-      float range_weight =
-          std::max(std::abs(min_weight[i]), std::abs(max_weight[i]));
-      float scale_bias =
-          (max_int8_input * max_int8_weight) / (range_input * range_weight);
-      this->current_scale_bias_[i] = scale_bias;
-    }
-
-    if (this->is_bias_const_ && !this->IsBiasCacheEmpty() &&
-        this->IsCachedBiasValid()) {
+    // We can use cached bias which has been scaled only when (i) bias is
+    // constant (ii) weight is constant (iii) min_input is same as saved one
+    // (iv) max_input is same as saved one (v) BiasCache is not empty.
+    if (!this->IsBiasCacheEmpty() &&
+        this->IsCachedBiasValid(min_input, max_input)) {
       this->GetCachedBias(ctx, bias_data);
     } else {
       void* input_bias_buf = static_cast<void*>(
@@ -584,78 +566,86 @@ class MklQuantizedFusedMatMulOp
                                   temp_scaled_bias_tensor));
       void* scaled_bias_buf =
           static_cast<void*>(temp_scaled_bias_tensor->flat<Tbias>().data());
+
+      const float max_int8_input =
+          (std::is_same<T1, quint8>::value) ? 255.0f : 127.0f;
+      const float max_int8_weight =
+          (std::is_same<T2, quint8>::value) ? 255.0f : 127.0f;
+      const float range_input =
+          (mode_ == "MIN_FIRST")
+              ? max_input - min_input
+              : std::max(std::abs(min_input), std::abs(max_input));
+      const size_t num_weight_scales = min_weight_tensor.NumElements();
+      std::vector<float> bias_scales(num_weight_scales, 1.0);
+      for (size_t i = 0; i < num_weight_scales; ++i) {
+        float range_weight =
+            std::max(std::abs(min_weight[i]), std::abs(max_weight[i]));
+        float scale_factor =
+            (max_int8_input * max_int8_weight) / (range_input * range_weight);
+        bias_scales[i] = scale_factor;
+      }
       if (mode_ == "MIN_FIRST") {
-        Tbias* input_bias = (Tbias*) input_bias_buf;
-        Tbias* adjusted_bias = (Tbias*) scaled_bias_buf;
+        Tbias* input_bias = (Tbias*)input_bias_buf;
+        Tbias* adjusted_bias = (Tbias*)scaled_bias_buf;
         float q_min_input = max_int8_input * min_input / range_input;
         const Tensor& weight_tensor = ctx->input(1);
         int k = weight_tensor.dim_size(0);
         int n = weight_tensor.dim_size(1);
         T2* wt_buf = const_cast<T2*>(weight_tensor.flat<T2>().data());
-        std::vector<float> scale_bias(n);
-        if (this->current_scale_bias_.size() == n) {
-          scale_bias = this->current_scale_bias_;
-        } else {
-          std::fill(scale_bias.begin(), scale_bias.end(),
-                    this->current_scale_bias_[0]);
-        }
+        // Scales needs to expanded to number of output channels by the values
+        // of bias_scales.
+        std::vector<float> scales(n);
+        if (scales.size() != n)  // weights quanitzed per_tensor
+          std::fill(scales.begin(), scales.end(), bias_scales[0]);
+        else
+          scales = bias_scales;  // Expensive copy
 #pragma omp parallel for schedule(static)
         for (int j = 0; j < n; ++j) {
           int sum = 0;
           for (int i = 0; i < k; ++i) {
             sum += wt_buf[i * n + j];
           }
-          adjusted_bias[j] =
-              ((input_bias[j] * scale_bias[j]) + static_cast<float>(sum * q_min_input));
+          adjusted_bias[j] = ((input_bias[j] * scales[j]) +
+                              static_cast<float>(sum * q_min_input));
         }
-      }
-      else {
+      } else {
         mkldnn::primitive_attr bias_attr;
-        (num_output_channels == 1)
-            ? bias_attr.set_output_scales(0, this->current_scale_bias_)
-            : bias_attr.set_output_scales(1, this->current_scale_bias_);
-
+        (num_weight_scales == 1) ? bias_attr.set_output_scales(0, bias_scales)
+                                 : bias_attr.set_output_scales(1, bias_scales);
         memory::dims input_bias_dims =
             memory::dims({bias_tensor.shape().dim_size(0)});
         auto input_bias_md = mkldnn::memory::desc(
             input_bias_dims, MklDnnType<Tbias>(), memory::format_tag::x);
         auto input_bias_mem =
             mkldnn::memory(input_bias_md, this->cpu_engine_, input_bias_buf);
-
         auto scaled_bias_mem =
             mkldnn::memory(scaled_bias_md, this->cpu_engine_, scaled_bias_buf);
-
         auto reorder_prim =
             mkldnn::reorder(input_bias_mem, scaled_bias_mem, bias_attr);
         std::unordered_map<int, memory> reorder_net_args = {
-            {MKLDNN_ARG_FROM, input_bias_mem}, {MKLDNN_ARG_TO, scaled_bias_mem}};
-        reorder_prim.execute(mkldnn::stream(this->cpu_engine_), reorder_net_args);
+            {MKLDNN_ARG_FROM, input_bias_mem},
+            {MKLDNN_ARG_TO, scaled_bias_mem}};
+        reorder_prim.execute(mkldnn::stream(this->cpu_engine_),
+                             reorder_net_args);
       }
 
       *bias_data = temp_scaled_bias_tensor->flat<Tbias>().data();
 
-      // Caching is expensive, so cache only once.
-      if (this->is_bias_const_ && this->IsBiasCacheEmpty()) {
-        if (this->fixed_scale_bias_.size() !=
-            this->current_scale_bias_.size()) {
-          this->fixed_scale_bias_.resize(this->current_scale_bias_.size());
-        }
-        for (size_t i = 0; i < this->current_scale_bias_.size(); ++i) {
-          this->fixed_scale_bias_[i] = this->current_scale_bias_[i];
-        }
+      // Cache the scaled bias
+      if (this->is_bias_const_ && this->is_weight_const_) {
         this->CacheBias(ctx, *temp_scaled_bias_tensor);
+        this->saved_min_input_ = min_input;
+        this->saved_max_input_ = max_input;
       }
     }
   }
 
-  bool IsCachedBiasValid() override {
-    for (size_t i = 0; i < this->fixed_scale_bias_.size(); ++i) {
-      if (std::abs(this->fixed_scale_bias_[i] - this->current_scale_bias_[i]) >
-          1e-5) {
-        return false;
-      }
-    }
-    return (this->fixed_scale_bias_.size() > 0) && true;
+  bool IsCachedBiasValid(float current_min_input, float current_max_input) {
+    if (this->is_bias_const_ && this->is_weight_const_ &&
+        std::abs(current_min_input - saved_min_input_) < 1e-5 &&
+        std::abs(current_max_input - saved_max_input_) < 1e-5)
+      return true;
+    return false;
   }
 
  private:
@@ -667,11 +657,8 @@ class MklQuantizedFusedMatMulOp
   const int kInputIndexMaxOutput = 8;
 
   string mode_;
-  std::vector<float> fixed_scale_bias_ = std::vector<float>(1, 1.0f);
-
-  // Set to a value such that difference with fixed is > 1e-5.
-  // During, each kernel executation time it will be overwritten.
-  std::vector<float> current_scale_bias_ = std::vector<float>(1, 1.1f);
+  float saved_min_input_ = -std::numeric_limits<float>::infinity();
+  float saved_max_input_ = std::numeric_limits<float>::infinity();
 };
 
 // Register mkl kernels for supported operations and types.
