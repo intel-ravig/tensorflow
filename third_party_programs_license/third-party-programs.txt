@@ -44,8 +44,8 @@ Third party programs and their corresponding required notices and/or license ter
    importlib-metadata
    Copyright 2017-2019 Jason R. Coombs, Barry Warsaw
    
-   Intel(R) Math Kernel Library for Deep Neural Networks
-   Copyright 2016-2019 Intel Corporation. Copyright 2018 YANDEX LLC.
+   oneAPI Deep Neural Network Library (oneDNN)
+   Copyright 2016-2019 Intel Corporation.
    
    IntelÂ® Optimization for TensorFlow*(Intel tensorflow) 
   
@@ -2205,7 +2205,7 @@ OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 ---------------------------------------------------------------------------------------------------------------------
 The following third party programs have their own third party program files. These additional third party program files are as follows:
 
-1. Intel® Math Kernel Library (Intel® MKL): ./third_party_programs_license/oneDNN-THIRD-PARTY-PROGRAMS
+1. oneAPI Deep Neural Network Library (oneDNN): ./third_party_programs_license/oneDNN-THIRD-PARTY-PROGRAMS
 2. Intel® Optimization for TensorFlow*(Intel tensorflow): ./third_party_programs_license/third-party-programs.txt
 
 
