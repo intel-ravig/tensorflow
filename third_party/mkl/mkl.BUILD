@@ -20,8 +20,8 @@ cc_library(
 cc_library(
     name = "mkl_libs_linux",
     srcs = [
-        "lib/libiomp5.so",
-        "lib/libmklml_intel.so",
+        "lib/intel64/libiomp5.so",
+        "lib/intel64/libmkl_rt.so.1",
     ],
     visibility = ["//visibility:public"],
 )
