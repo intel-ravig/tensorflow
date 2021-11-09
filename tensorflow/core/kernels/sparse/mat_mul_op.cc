@@ -19,6 +19,8 @@ limitations under the License.
 #define EIGEN_USE_GPU
 #endif
 
+#include "mkl.h"
+
 #include "third_party/eigen3/Eigen/Core"
 #include "third_party/eigen3/Eigen/SparseCore"
 #include "third_party/eigen3/unsupported/Eigen/CXX11/Tensor"
@@ -208,7 +210,9 @@ class CSRMatMulCPUOp : public CSRMatMulOp<CPUDevice, T> {
                             &output_transposed, &matmul_result));
 
     if (!this->transpose_a_) {
-      SparseDenseMatMulWithoutTransposedLHS(
+      //SparseDenseMatMulWithoutTransposedLHS(
+          //ctx, batch_size, num_lhs_rows, *sparse_matrix_a, *rhs, matmul_result);
+      SparseDenseMatMulWithoutTransposedLHS_MKL(
           ctx, batch_size, num_lhs_rows, *sparse_matrix_a, *rhs, matmul_result);
     } else {  // transpose_a_ == true
       SparseDenseMatMulWithTransposedLHS(ctx, batch_size, num_lhs_rows,
@@ -328,6 +332,41 @@ class CSRMatMulCPUOp : public CSRMatMulOp<CPUDevice, T> {
                 output_map.noalias() = sparse_matrix * rhs_map;
               });
         });
+  }
+  
+  void SparseDenseMatMulWithoutTransposedLHS_MKL(
+      OpKernelContext* ctx, const int64 batch_size, const int64 num_lhs_rows,
+      const CSRSparseMatrix& lhs, const Tensor& rhs, Tensor* output) {
+      
+   sparse_matrix_t mkl_matrix_handle;
+   sparse_status_t status;
+   
+   const int64 num_rhs_rows = rhs.dim_size(rhs.dims() - 2);
+   const int64 num_rhs_cols = rhs.dim_size(rhs.dims() - 1);
+   
+   // create MKL sparse matrix handle 
+   sparse_index_base_t mkl_indexing = SPARSE_INDEX_BASE_ZERO;
+   const int64 num_lhs_cols = lhs.dense_shape().vec<int64>()(lhs.dims() - 1);
+   const int* ia = lhs.row_pointers().flat<int32>().data();
+   const int* ja = lhs.col_indices().flat<int32>().data();
+   const float* vals = lhs.values().flat<float>().data();
+   status = mkl_sparse_s_create_csr(&mkl_matrix_handle, mkl_indexing, num_lhs_rows, num_lhs_cols, const_cast <int *> (ia), const_cast <int *> (ia + 1), const_cast <int *> (ja), const_cast <float *> (vals));
+   
+   // Set necessary hint for mm + optimize
+   sparse_operation_t operation = SPARSE_OPERATION_NON_TRANSPOSE;
+   matrix_descr descr;
+   descr.type = SPARSE_MATRIX_TYPE_GENERAL;
+   sparse_layout_t layout = SPARSE_LAYOUT_ROW_MAJOR;
+   status = mkl_sparse_set_mm_hint(mkl_matrix_handle, operation, descr, layout, num_rhs_cols, 100000 /* random large number */ );
+   
+   // Pick optimal kernel and other optimizations
+   status = mkl_sparse_optimize(mkl_matrix_handle);
+   
+   // Perform sparse matmul - output = A * input + output [~ bias]
+   status = mkl_sparse_s_mm ( operation, 1.0f, mkl_matrix_handle, descr, layout, rhs.flat<float>().data(), num_rhs_cols, num_rhs_cols, .0f, output->flat<float>().data(), num_rhs_cols);
+   
+   // destroy MKL matrix handle
+   mkl_sparse_destroy(mkl_matrix_handle);
   }
 
   // Sparse-Dense Matrix Multiplication assuming the CSRSparseMatrix (LHS) is
