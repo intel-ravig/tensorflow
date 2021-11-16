@@ -68,7 +68,8 @@ RUN echo "import /root/.mkl.bazelrc" >>/root/.bazelrc
 # Install futures>=0.17.1 for Python2.7 compatibility mode
 RUN ${PIP} install future>=0.17.1
 
-RUN bazel --bazelrc=/root/.bazelrc build -c opt \
+RUN bazel --bazelrc=/root/.bazelrc build \
+    --experimental_cc_shared_library -c opt \
     tensorflow/tools/pip_package:build_pip_package && \
     bazel-bin/tensorflow/tools/pip_package/build_pip_package "${TF_NIGHTLY_FLAG}" "${WHL_DIR}" && \
     ${PIP} --no-cache-dir install --upgrade "${WHL_DIR}"/*.whl && \
