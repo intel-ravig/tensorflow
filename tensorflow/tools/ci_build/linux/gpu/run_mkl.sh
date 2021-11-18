@@ -74,7 +74,6 @@ echo ""
 #Bazel test command with two option eigencuda or dnllcuda
 
 bazel test \
-    --experimental_cc_shared_library \
     --test_tag_filters=gpu,-no_gpu,-nogpu,-benchmark-test,-no_gpu_presubmit,-no_cuda11,-v1only,-no_oss,-oss_serial \
     --build_tag_filters=gpu,-no_gpu,-nogpu,-benchark-test,-no_oss,-oss_serial,-no_gpu_presubmit,-no_cuda11,-v1only \
     --test_lang_filters=cc,py \
