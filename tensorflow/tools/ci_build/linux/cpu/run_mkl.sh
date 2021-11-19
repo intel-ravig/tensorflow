@@ -89,7 +89,6 @@ echo ""
 # execution in an MKL primitive. This reduces the effects of an oversubscription
 # of OpenMP threads caused by executing multiple tests concurrently.
 bazel test \
-    --experimental_cc_shared_library \
     --test_tag_filters=-no_oss,-no_oss_py2,-oss_serial,-gpu,-tpu,-benchmark-test,-v1only \
     --test_lang_filters=cc,py \
     -k \
