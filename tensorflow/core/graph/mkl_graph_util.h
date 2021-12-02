@@ -88,24 +88,6 @@ bool inline DoesControlEdgeExist(const Node* src, const Node* dst) {
   return false;
 }
 
-// Check if graph should run in layout-dependent mode or native format mode
-// based on environment variable setting. Native format mode is default. User
-// can set TF_ENABLE_MKL_NATIVE_FORMAT=0 to disable the native format mode.
-bool inline NativeFormatEnabled() {
-#ifndef ENABLE_MKL
-  return true;
-#else
-  static bool native_fmt_enabled = true;
-  static absl::once_flag once;
-  absl::call_once(once, [&] {
-    TF_CHECK_OK(ReadBoolFromEnvVar("TF_ENABLE_MKL_NATIVE_FORMAT",
-                                   /*default_value*/ true,
-                                   &native_fmt_enabled));
-  });
-  return native_fmt_enabled;
-#endif
-}
-
 // Check if the data_format attribute in the node def represents 5D tensor
 bool inline Check5DFormat(const NodeDef& ndef) {
   string data_format;
@@ -168,13 +150,9 @@ inline string GetMklNativeOpName(const string& name) {
 }
 
 // Get the name of Mkl op from original TensorFlow op
-// We prefix the original op with _Mkl or _MklNative to get Mkl op.
+// We prefix the original op with _MklNative to get Mkl op.
 inline string GetMklOpName(const string& name) {
-  if (!NativeFormatEnabled()) {
-    return string(kMklOpPrefix) + name;
-  } else {
-    return GetMklNativeOpName(name);
-  }
+  return GetMklNativeOpName(name);
 }
 
 // Get the name of Mkl Eager op from original TensorFlow op

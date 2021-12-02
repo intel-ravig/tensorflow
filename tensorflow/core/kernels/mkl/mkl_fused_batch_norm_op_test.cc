@@ -277,37 +277,18 @@ class FusedBatchNormOpTest : public OpsTestBase {
                                        const bool is_training, Tensor* output,
                                        Tensor* batch_mean, Tensor* batch_var) {
       DataType dtype = DataTypeToEnum<T>::v();
-      if (!NativeFormatEnabled()) {
-        TF_EXPECT_OK(NodeDefBuilder("MklFusedBatchNorm", "_MklFusedBatchNorm")
-                         .Input(FakeInput(dtype))
-                         .Input(FakeInput(DT_FLOAT))
-                         .Input(FakeInput(DT_FLOAT))
-                         .Input(FakeInput(DT_FLOAT))
-                         .Input(FakeInput(DT_FLOAT))
-                         .Input(FakeInput(DT_UINT8))
-                         .Input(FakeInput(DT_UINT8))
-                         .Input(FakeInput(DT_UINT8))
-                         .Input(FakeInput(DT_UINT8))
-                         .Input(FakeInput(DT_UINT8))
-                         .Attr("exponential_avg_factor", exponential_avg_factor)
-                         .Attr("epsilon", 0.001)
-                         .Attr("is_training", is_training)
-                         .Attr("_kernel", "MklLayoutDependentOp")
-                         .Finalize(node_def()));
-      } else {
-        TF_EXPECT_OK(NodeDefBuilder("MklNativeFusedBatchNorm",
-                                    "_MklNativeFusedBatchNorm")
-                         .Input(FakeInput(dtype))
-                         .Input(FakeInput(DT_FLOAT))
-                         .Input(FakeInput(DT_FLOAT))
-                         .Input(FakeInput(DT_FLOAT))
-                         .Input(FakeInput(DT_FLOAT))
-                         .Attr("exponential_avg_factor", exponential_avg_factor)
-                         .Attr("epsilon", 0.001)
-                         .Attr("is_training", is_training)
-                         .Attr("_kernel", "MklNameChangeOp")
-                         .Finalize(node_def()));
-      }
+      TF_EXPECT_OK(NodeDefBuilder("MklNativeFusedBatchNorm",
+                                  "_MklNativeFusedBatchNorm")
+                       .Input(FakeInput(dtype))
+                       .Input(FakeInput(DT_FLOAT))
+                       .Input(FakeInput(DT_FLOAT))
+                       .Input(FakeInput(DT_FLOAT))
+                       .Input(FakeInput(DT_FLOAT))
+                       .Attr("exponential_avg_factor", exponential_avg_factor)
+                       .Attr("epsilon", 0.001)
+                       .Attr("is_training", is_training)
+                       .Attr("_kernel", "MklNameChangeOp")
+                       .Finalize(node_def()));
       TF_EXPECT_OK(InitOp());
 
       AddInputFromArray<T>(input.shape(), input.flat<T>());
@@ -315,29 +296,11 @@ class FusedBatchNormOpTest : public OpsTestBase {
       AddInputFromArray<float>(offset.shape(), offset.flat<float>());
       AddInputFromArray<float>(mean.shape(), mean.flat<float>());
       AddInputFromArray<float>(variance.shape(), variance.flat<float>());
-      if (!NativeFormatEnabled()) {
-        for (int i = 0; i < 5; ++i)
-          AddInputFromArray<uint8>(dummy_shape, dummy_tensor);
-      }
       TF_ASSERT_OK(RunOpKernel());
 
-      if (!NativeFormatEnabled()) {
-        CommonTestUtilities<T> test_util;
-        test_util.PerformConversion(dtype, *GetOutput(0), *GetOutput(5),
-                                    output);
-
-        CommonTestUtilities<T> test_util_mean;
-        test_util_mean.PerformConversion(dtype, *GetOutput(1), *GetOutput(6),
-                                         batch_mean);
-
-        CommonTestUtilities<T> test_util_var;
-        test_util_var.PerformConversion(dtype, *GetOutput(2), *GetOutput(7),
-                                        batch_var);
-      } else {
-        *output = *GetOutput(0);
-        *batch_mean = *GetOutput(1);
-        *batch_var = *GetOutput(2);
-      }
+      *output = *GetOutput(0);
+      *batch_mean = *GetOutput(1);
+      *batch_var = *GetOutput(2);
     };
 
     CommonTestUtilities<T>::VerifyTensorsClose(exponential_avg_factor,

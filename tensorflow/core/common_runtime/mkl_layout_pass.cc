@@ -381,7 +381,7 @@ class MklLayoutRewritePass : public GraphOptimizationPass {
     csinfo_.sub = "Sub";
     // End - element-wise ops. See note above.
 
-    const bool native_fmt = NativeFormatEnabled();
+    const bool native_fmt = true;
     // NOTE: names are alphabetically sorted.
     rinfo_.push_back({csinfo_.addn, mkl_op_registry::GetMklOpName(csinfo_.addn),
                       CopyAttrsAll, AlwaysRewrite, GetRewriteCause()});
@@ -825,14 +825,9 @@ class MklLayoutRewritePass : public GraphOptimizationPass {
   /// of ops like MatMul, Transpose, which do not support Mkl layout)
   enum RewriteCause { kRewriteForLayoutPropagation, kRewriteForOpNameChange };
 
-  // Get the op rewrite cause depending on whether native format mode
-  // is enabled or not.
+  // Get the op rewrite cause
   RewriteCause GetRewriteCause() {
-    if (NativeFormatEnabled()) {
-      return kRewriteForOpNameChange;
-    } else {
-      return kRewriteForLayoutPropagation;
-    }
+    return kRewriteForOpNameChange;
   }
 
   /// Structure to specify the name of an original node, its new name after
@@ -1786,10 +1781,7 @@ class MklLayoutRewritePass : public GraphOptimizationPass {
     // it includes those we support.
     DataType T;
     if (!TryGetNodeAttr(n->def(), "T", &T) ||
-        !mkl_op_registry::IsMklOp(NativeFormatEnabled()
-                                      ? csinfo_.mkl_native_fused_conv2d
-                                      : csinfo_.mkl_fused_conv2d,
-                                  T)) {
+        !mkl_op_registry::IsMklOp(csinfo_.mkl_native_fused_conv2d, T)) {
       return false;
     }
 
@@ -1822,10 +1814,8 @@ class MklLayoutRewritePass : public GraphOptimizationPass {
     // _FusedDepthwiseConv2DNative only if it includes those we support.
     DataType T;
     if (!TryGetNodeAttr(n->def(), "T", &T) ||
-        !mkl_op_registry::IsMklOp(
-            NativeFormatEnabled() ? csinfo_.mkl_native_fused_depthwise_conv2d
-                                  : csinfo_.mkl_fused_depthwise_conv2d,
-            T)) {
+        !mkl_op_registry::IsMklOp(csinfo_.mkl_native_fused_depthwise_conv2d,
+                                  T)) {
       return false;
     }
 
@@ -2562,14 +2552,6 @@ void MklLayoutRewritePass::AddWorkSpaceEdgeIfNeeded(
           DCHECK(ws_tensors);
           // Add workspace edge between fwd op and bwd op.
           ws_tensors->push_back(NodeBuilder::NodeOut(e->src(), ws.ws_fwd_slot));
-          // Check if we are running in native format mode. If so,
-          // we don't need to have an Mkl metadata tensor for the workspace.
-          if (!NativeFormatEnabled()) {
-            // Add Mkl tensor edge for workspace edge between fwd op and bwd op.
-            ws_tensors->push_back(NodeBuilder::NodeOut(
-                e->src(), DataIndexToMetaDataIndex(ws.ws_fwd_slot,
-                                                   e->src()->num_outputs())));
-          }
           *are_ws_tensors_added = true;
           // In terms of input ordering, we add these calls to add Input
           // here because workspace edge (and its Mkl tensor) is the last
@@ -3606,11 +3588,7 @@ Status MklLayoutRewritePass::RewriteNodeForJustOpNameChange(
     }
   }
 
-  if (!NativeFormatEnabled()) {
-    ri->copy_attrs(const_cast<const Node*>(orig_node), &nb, true);
-  } else {
-    ri->copy_attrs(const_cast<const Node*>(orig_node), &nb, false);
-  }
+  ri->copy_attrs(const_cast<const Node*>(orig_node), &nb, false);
 
   if (DataTypeIsQuantized(orig_node->input_type(0)) ||
       DataTypeIsQuantized(orig_node->output_type(0))) {
@@ -4104,27 +4082,6 @@ bool MklLayoutRewritePass::RunPass(std::unique_ptr<Graph>* g) {
   }
 
   DumpGraph("After running MklLayoutRewritePass(NodeMerge+Rewrite)", &**g);
-
-  if (!NativeFormatEnabled()) {
-    order.clear();
-    GetReversePostOrder(**g, &order);  // This will give us topological sort.
-    for (Node* n : order) {
-      // If node is not an op or it cannot run on CPU device, then skip.
-      if (!n->IsOp() || !CanOpRunOnCPUDevice(n)) {
-        continue;
-      }
-      if (FixMklMetaDataEdges(g, n)) {
-        string node_name = n->name();
-        string op_name = n->type_string();
-
-        VLOG(1) << "MklLayoutRewritePass: fixed metadata edges for node "
-                << node_name << " with op " << op_name;
-        result = true;
-      }
-    }
-    DumpGraph("After running MklLayoutRewritePass(NodeMerge+Rewrite+Fixup)",
-              &**g);
-  }
 
   return result;
 }

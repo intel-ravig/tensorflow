@@ -422,38 +422,8 @@ bool InsertMklToTfConversionNodes(std::unique_ptr<Graph>* g) {
 }
 
 Status MklToTfConversionPass::Run(const GraphOptimizationPassOptions& options) {
-  if (options.graph == nullptr && options.partition_graphs == nullptr) {
-    return Status::OK();
-  }
-  if (!IsMKLEnabled()) {
-    VLOG(2) << "TF-MKL: MKL is not enabled";
-    return Status::OK();
-  }
-  if (NativeFormatEnabled()) {
-    VLOG(2)
-        << "Running in native format mode, MklToTfConversionPass won't run.";
-    return Status::OK();
-  }
-
-  auto process_graph = [&](std::unique_ptr<Graph>* g) {
-    // Get the ownership of graph
-    std::unique_ptr<Graph>* ng = std::move(g);
-    RunPass(ng);
-    // Return the ownership of graph back
-    g->reset(ng->release());
-  };
-
-  if (kMklTfConvPassGroup != OptimizationPassRegistry::POST_PARTITIONING) {
-    // For any pre-partitioning phase, graph is stored in options.graph.
-    process_graph(options.graph);
-  } else {
-    // For post partitioning phase, graphs are stored in
-    // options.partition_graphs.
-    for (auto& pg : *options.partition_graphs) {
-      process_graph(&pg.second);
-    }
-  }
-
+  // Always running in native format mode, MklToTfConversionPass won't run.
+  // TODO(intel-tf): git rid of this method MklToTfConversionPass::Run()
   return Status::OK();
 }
 
