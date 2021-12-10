@@ -589,8 +589,21 @@ class MklQuantizedFusedMatMulOp
         Tbias* adjusted_bias = (Tbias*)scaled_bias_buf;
         float q_min_input = max_int8_input * min_input / range_input;
         const Tensor& weight_tensor = ctx->input(1);
-        int k = weight_tensor.dim_size(0);
-        int n = weight_tensor.dim_size(1);
+        int stride_ic = 1;
+        int stride_oc = 1;
+        int k = 0;
+        int n = 0;
+        if (this->transpose_b_) {
+          k = weight_tensor.dim_size(1);
+          n = weight_tensor.dim_size(0);
+          stride_ic = 1;
+          stride_oc = k;
+        } else {
+          k = weight_tensor.dim_size(0);
+          n = weight_tensor.dim_size(1);
+          stride_ic = n;
+          stride_oc = 1;
+        }
         T2* wt_buf = const_cast<T2*>(weight_tensor.flat<T2>().data());
         // Scales needs to expanded to number of output channels by the values
         // of bias_scales.
@@ -603,7 +616,7 @@ class MklQuantizedFusedMatMulOp
         for (int j = 0; j < n; ++j) {
           int sum = 0;
           for (int i = 0; i < k; ++i) {
-            sum += wt_buf[i * n + j];
+            sum += wt_buf[i * stride_ic + j * stride_oc];
           }
           adjusted_bias[j] = ((input_bias[j] * scales[j]) +
                               static_cast<float>(sum * q_min_input));
