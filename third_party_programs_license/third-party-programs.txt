@@ -2220,5 +2220,6 @@ The docker container layers depends on the use of the following additional layer
 
 ---------------------------------------------------------------------------------------------------------------------
 
+The source code for eigen can be found as follow: https://gitlab.com/libeigen/eigen/
 
 Other names and brands may be claimed as the property of others.
