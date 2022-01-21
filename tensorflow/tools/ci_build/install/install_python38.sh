@@ -15,11 +15,11 @@
 # ==============================================================================
 
 cd /usr/src
-wget https://www.python.org/ftp/python/3.8.2/Python-3.8.2.tgz
-tar xzf Python-3.8.2.tgz
-cd Python-3.8.2
+wget https://www.python.org/ftp/python/3.8.10/Python-3.8.10.tgz
+tar xzf Python-3.8.10.tgz
+cd Python-3.8.10
 ./configure --enable-optimizations  --with-ensurepip=install --prefix=/usr/
 make altinstall
-rm /usr/src/Python-3.8.2.tgz
-rm -rf /usr/src/Python-3.8.2
+rm /usr/src/Python-3.8.10.tgz
+rm -rf /usr/src/Python-3.8.10
 
