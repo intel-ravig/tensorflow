@@ -22,6 +22,11 @@ cc_library(
     srcs = [
         "lib/intel64/libiomp5.so",
         "lib/intel64/libmkl_rt.so.1",
+        "lib/intel64/libmkl_core.so.1",
+        "lib/intel64/libmkl_intel_thread.so.1",
+        "lib/intel64/libmkl_intel_lp64.so.1",
+        "lib/intel64/libmkl_avx512.so.1",
+        "lib/intel64/libmkl_def.so.1",
     ],
     visibility = ["//visibility:public"],
 )
