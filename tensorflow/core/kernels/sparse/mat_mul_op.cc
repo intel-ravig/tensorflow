@@ -19,7 +19,9 @@ limitations under the License.
 #define EIGEN_USE_GPU
 #endif
 
+#ifdef INTEL_MKL
 #include "mkl.h"
+#endif
 
 #include "third_party/eigen3/Eigen/Core"
 #include "third_party/eigen3/Eigen/SparseCore"
@@ -210,10 +212,13 @@ class CSRMatMulCPUOp : public CSRMatMulOp<CPUDevice, T> {
                             &output_transposed, &matmul_result));
 
     if (!this->transpose_a_) {
-      //SparseDenseMatMulWithoutTransposedLHS(
-          //ctx, batch_size, num_lhs_rows, *sparse_matrix_a, *rhs, matmul_result);
+#ifdef INTEL_MKL
       SparseDenseMatMulWithoutTransposedLHS_MKL(
           ctx, batch_size, num_lhs_rows, *sparse_matrix_a, *rhs, matmul_result);
+#else
+      SparseDenseMatMulWithoutTransposedLHS(
+          ctx, batch_size, num_lhs_rows, *sparse_matrix_a, *rhs, matmul_result);
+#endif
     } else {  // transpose_a_ == true
       SparseDenseMatMulWithTransposedLHS(ctx, batch_size, num_lhs_rows,
                                          num_lhs_cols, *sparse_matrix_a, *rhs,
