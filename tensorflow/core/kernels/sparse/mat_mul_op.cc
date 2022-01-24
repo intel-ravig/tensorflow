@@ -213,7 +213,7 @@ class CSRMatMulCPUOp : public CSRMatMulOp<CPUDevice, T> {
 
     if (!this->transpose_a_) {
 #ifdef INTEL_MKL
-      SparseDenseMatMulWithoutTransposedLHS_MKL(
+      SparseDenseMatMulWithoutTransposedLHSMkl(
           ctx, batch_size, num_lhs_rows, *sparse_matrix_a, *rhs, matmul_result);
 #else
       SparseDenseMatMulWithoutTransposedLHS(
@@ -339,7 +339,9 @@ class CSRMatMulCPUOp : public CSRMatMulOp<CPUDevice, T> {
         });
   }
   
-  void SparseDenseMatMulWithoutTransposedLHS_MKL(
+  // Sparse-Dense Matrix Multiplication between a CSRSparseMatrix (LHS) and a
+  // dense Tensor (RHS) using oneMKL backend
+  void SparseDenseMatMulWithoutTransposedLHSMkl(
       OpKernelContext* ctx, const int64 batch_size, const int64 num_lhs_rows,
       const CSRSparseMatrix& lhs, const Tensor& rhs, Tensor* output) {
       
