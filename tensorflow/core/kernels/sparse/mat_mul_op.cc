@@ -213,8 +213,15 @@ class CSRMatMulCPUOp : public CSRMatMulOp<CPUDevice, T> {
 
     if (!this->transpose_a_) {
 #ifdef INTEL_MKL
+    // oneMKL only supports standard GEMM (2D). So, falling back to Eigen implementation for sparse batch GEMM (3D)
+    if (rank == 2) {
       SparseDenseMatMulWithoutTransposedLHSMkl(
           ctx, batch_size, num_lhs_rows, *sparse_matrix_a, *rhs, matmul_result);
+	}
+	else {
+	  SparseDenseMatMulWithoutTransposedLHS(
+          ctx, batch_size, num_lhs_rows, *sparse_matrix_a, *rhs, matmul_result);
+	}
 #else
       SparseDenseMatMulWithoutTransposedLHS(
           ctx, batch_size, num_lhs_rows, *sparse_matrix_a, *rhs, matmul_result);
