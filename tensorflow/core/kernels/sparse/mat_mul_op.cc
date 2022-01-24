@@ -355,7 +355,7 @@ class CSRMatMulCPUOp : public CSRMatMulOp<CPUDevice, T> {
    const int* ia = lhs.row_pointers().flat<int32>().data();
    const int* ja = lhs.col_indices().flat<int32>().data();
    const float* vals = lhs.values().flat<float>().data();
-   status = mkl_sparse_s_create_csr(&mkl_matrix_handle, mkl_indexing, num_lhs_rows, num_lhs_cols, const_cast <int *> (ia), const_cast <int *> (ia + 1), const_cast <int *> (ja), const_cast <float *> (vals));
+   status = mkl_sparse_s_create_csr(&mkl_matrix_handle, mkl_indexing, num_lhs_rows, num_lhs_cols, const_cast <int32 *> (ia), const_cast <int32 *> (ia + 1), const_cast <int32 *> (ja), const_cast <float *> (vals));
    
    // Set necessary hint for mm + optimize
    sparse_operation_t operation = SPARSE_OPERATION_NON_TRANSPOSE;
@@ -370,7 +370,7 @@ class CSRMatMulCPUOp : public CSRMatMulOp<CPUDevice, T> {
    //status = mkl_sparse_optimize(mkl_matrix_handle);
    
    // Perform sparse matmul - output = A * input
-   status = mkl_sparse_s_mm ( operation, 1.0f, mkl_matrix_handle, descr, layout, rhs.flat<float>().data(), num_rhs_cols, num_rhs_cols, .0f, output->flat<float>().data(), num_rhs_cols);
+   status = mkl_sparse_s_mm ( operation, 1.0f, mkl_matrix_handle, descr, layout, rhs.flat<float>().data(), num_rhs_cols, num_rhs_cols, 0.0f, output->flat<float>().data(), num_rhs_cols);
    
    // destroy MKL matrix handle
    mkl_sparse_destroy(mkl_matrix_handle);
