@@ -355,6 +355,9 @@ class CSRMatMulCPUOp : public CSRMatMulOp<CPUDevice, T> {
    sparse_matrix_t mkl_matrix_handle;
    sparse_status_t status;
    
+   // row pointers should have size >= num_rows + 1
+   OP_REQUIRES(ctx, (lhs.row_pointers().dim_size(0) >= (num_lhs_rows + 1)), errors::InvalidArgument("CSRSparseMatrix - row_pointers should have size >= (num_rows + 1)"));
+   
    const int64 num_rhs_rows = rhs.dim_size(rhs.dims() - 2);
    const int64 num_rhs_cols = rhs.dim_size(rhs.dims() - 1);
    
