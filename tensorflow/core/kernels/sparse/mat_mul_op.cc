@@ -380,16 +380,18 @@ class CSRMatMulCPUOp : public CSRMatMulOp<CPUDevice, T> {
     matrix_descr descr;
     descr.type = SPARSE_MATRIX_TYPE_GENERAL;
     sparse_layout_t layout = SPARSE_LAYOUT_ROW_MAJOR;
-    // TODO: Default oneMKL sparse implementation is already optimized. So,
-    // "mkl_sparse_set_mm_hint" function is not needed for now. This need to be
-    // turned on if we want to run a kernel selection logic in the future.
+    // TODO (intel-tf) : Default oneMKL sparse implementation is already
+    // optimized. So, "mkl_sparse_set_mm_hint" function is not needed for now.
+    // This need to be turned on if we want to run a kernel selection logic in
+    // the future.
 
     // Pick optimal kernel and other optimizations
-    // TODO: Default oneMKL sparse implementation is already optimized. So,
-    // "mkl_sparse_optimize" function is not needed for now. This need to be
-    // turned on if we want to run a kernel selection logic in the future.
+    // TODO (intel-tf) : Default oneMKL sparse implementation is already
+    // optimized. So, "mkl_sparse_optimize" function is not needed for now. This
+    // need to be turned on if we want to run a kernel selection logic in the
+    // future.
 
-    // Perform sparse matmul - output = A * input
+    // Perform following matrix operation - sparse * dense = dense
     status =
         mkl_sparse_s_mm(operation, 1.0f, mkl_matrix_handle, descr, layout,
                         rhs.flat<float>().data(), num_rhs_cols, num_rhs_cols,
