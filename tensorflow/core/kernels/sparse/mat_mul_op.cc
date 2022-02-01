@@ -19,9 +19,10 @@ limitations under the License.
 #define EIGEN_USE_GPU
 #endif
 
-#include "third_party/eigen3/Eigen/Core"
-#include "third_party/eigen3/Eigen/SparseCore"
-#include "third_party/eigen3/unsupported/Eigen/CXX11/Tensor"
+#ifdef INTEL_MKL
+#include "mkl.h"
+#endif
+
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/op_kernel.h"
 #include "tensorflow/core/framework/tensor_types.h"
@@ -35,6 +36,9 @@ limitations under the License.
 #include "tensorflow/core/kernels/transpose_functor.h"
 #include "tensorflow/core/lib/gtl/inlined_vector.h"
 #include "tensorflow/core/platform/threadpool.h"
+#include "third_party/eigen3/Eigen/Core"
+#include "third_party/eigen3/Eigen/SparseCore"
+#include "third_party/eigen3/unsupported/Eigen/CXX11/Tensor"
 
 #if GOOGLE_CUDA || TENSORFLOW_USE_ROCM
 #include "tensorflow/core/kernels/cuda_solvers.h"
@@ -208,8 +212,22 @@ class CSRMatMulCPUOp : public CSRMatMulOp<CPUDevice, T> {
                             &output_transposed, &matmul_result));
 
     if (!this->transpose_a_) {
+#ifdef INTEL_MKL
+      // oneMKL only supports standard GEMM (2D). So, falling back to Eigen
+      // implementation for sparse batch GEMM (3D)
+      if (rank == 2) {
+        SparseDenseMatMulWithoutTransposedLHSMkl(ctx, batch_size, num_lhs_rows,
+                                                 *sparse_matrix_a, *rhs,
+                                                 matmul_result);
+      } else {
+        SparseDenseMatMulWithoutTransposedLHS(ctx, batch_size, num_lhs_rows,
+                                              *sparse_matrix_a, *rhs,
+                                              matmul_result);
+      }
+#else
       SparseDenseMatMulWithoutTransposedLHS(
           ctx, batch_size, num_lhs_rows, *sparse_matrix_a, *rhs, matmul_result);
+#endif
     } else {  // transpose_a_ == true
       SparseDenseMatMulWithTransposedLHS(ctx, batch_size, num_lhs_rows,
                                          num_lhs_cols, *sparse_matrix_a, *rhs,
@@ -328,6 +346,59 @@ class CSRMatMulCPUOp : public CSRMatMulOp<CPUDevice, T> {
                 output_map.noalias() = sparse_matrix * rhs_map;
               });
         });
+  }
+
+  // Sparse-Dense Matrix Multiplication between a CSRSparseMatrix (LHS) and a
+  // dense Tensor (RHS) using oneMKL backend
+  void SparseDenseMatMulWithoutTransposedLHSMkl(
+      OpKernelContext* ctx, const int64 batch_size, const int64 num_lhs_rows,
+      const CSRSparseMatrix& lhs, const Tensor& rhs, Tensor* output) {
+    sparse_matrix_t mkl_matrix_handle;
+    sparse_status_t status;
+
+    // row pointers should have size >= num_rows + 1
+    OP_REQUIRES(ctx, (lhs.row_pointers().dim_size(0) >= (num_lhs_rows + 1)),
+                errors::InvalidArgument("CSRSparseMatrix - row_pointers should "
+                                        "have size >= (num_rows + 1)"));
+
+    const int64 num_rhs_rows = rhs.dim_size(rhs.dims() - 2);
+    const int64 num_rhs_cols = rhs.dim_size(rhs.dims() - 1);
+
+    // create MKL sparse matrix handle
+    sparse_index_base_t mkl_indexing = SPARSE_INDEX_BASE_ZERO;
+    const int64 num_lhs_cols = lhs.dense_shape().vec<int64>()(lhs.dims() - 1);
+    const int* ia = lhs.row_pointers().flat<int32>().data();
+    const int* ja = lhs.col_indices().flat<int32>().data();
+    const float* vals = lhs.values().flat<float>().data();
+    status = mkl_sparse_s_create_csr(
+        &mkl_matrix_handle, mkl_indexing, num_lhs_rows, num_lhs_cols,
+        const_cast<int32*>(ia), const_cast<int32*>(ia + 1),
+        const_cast<int32*>(ja), const_cast<float*>(vals));
+
+    // Set necessary hint for mm + optimize
+    sparse_operation_t operation = SPARSE_OPERATION_NON_TRANSPOSE;
+    matrix_descr descr;
+    descr.type = SPARSE_MATRIX_TYPE_GENERAL;
+    sparse_layout_t layout = SPARSE_LAYOUT_ROW_MAJOR;
+    // TODO (intel-tf) : Default oneMKL sparse implementation is already
+    // optimized. So, "mkl_sparse_set_mm_hint" function is not needed for now.
+    // This need to be turned on if we want to run a kernel selection logic in
+    // the future.
+
+    // Pick optimal kernel and other optimizations
+    // TODO (intel-tf) : Default oneMKL sparse implementation is already
+    // optimized. So, "mkl_sparse_optimize" function is not needed for now. This
+    // need to be turned on if we want to run a kernel selection logic in the
+    // future.
+
+    // Perform following matrix operation - sparse * dense = dense
+    status =
+        mkl_sparse_s_mm(operation, 1.0f, mkl_matrix_handle, descr, layout,
+                        rhs.flat<float>().data(), num_rhs_cols, num_rhs_cols,
+                        0.0f, output->flat<float>().data(), num_rhs_cols);
+
+    // destroy MKL matrix handle
+    mkl_sparse_destroy(mkl_matrix_handle);
   }
 
   // Sparse-Dense Matrix Multiplication assuming the CSRSparseMatrix (LHS) is
