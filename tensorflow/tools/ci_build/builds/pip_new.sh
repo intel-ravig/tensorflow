@@ -263,6 +263,9 @@ PIP_TEST_ROOT=${TF_PIP_TEST_ROOT:-$DEFAULT_PIP_TEST_ROOT}
 BUILD_BOTH_GPU_PACKAGES=${TF_BUILD_BOTH_GPU_PACKAGES:-$DEFAULT_BUILD_BOTH_GPU_PACKAGES}
 BUILD_BOTH_CPU_PACKAGES=${TF_BUILD_BOTH_CPU_PACKAGES:-$DEFAULT_BUILD_BOTH_CPU_PACKAGES}
 
+# Override breaking change in setuptools v60 (https://github.com/pypa/setuptools/pull/2896)
+export SETUPTOOLS_USE_DISTUTILS=stdlib
+
 # Local variables
 PIP_WHL_DIR="${KOKORO_ARTIFACTS_DIR}/tensorflow/${PIP_TEST_ROOT}/whl"
 mkdir -p "${PIP_WHL_DIR}"
@@ -468,9 +471,7 @@ install_tensorflow_pip() {
   # Check that requested python version matches configured one.
   check_python_pip_version
 
-  # setuptools v60.0.0 introduced a breaking change on how distutils is linked
-  # https://github.com/pypa/setuptools/blob/main/CHANGES.rst#v6000
-  ${PIP_BIN_PATH} install --upgrade "setuptools<60" || \
+  ${PIP_BIN_PATH} install --upgrade setuptools || \
     die "Error: setuptools install, upgrade FAILED"
 
   # Force tensorflow reinstallation. Otherwise it may not get installed from

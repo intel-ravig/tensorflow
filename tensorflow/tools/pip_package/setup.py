@@ -46,7 +46,7 @@ from setuptools.dist import Distribution
 # result for pip.
 # Also update tensorflow/tensorflow.bzl and
 # tensorflow/core/public/version.h
-_VERSION = '2.8.0-rc0'
+_VERSION = '2.8.0'
 
 
 # We use the same setup.py for all tensorflow_* packages and for the nightly
@@ -79,10 +79,10 @@ REQUIRED_PACKAGES = [
     'h5py >= 2.9.0',
     'keras_preprocessing >= 1.1.1', # 1.1.0 needs tensorflow==1.7
     'libclang >= 9.0.1',
-    'numpy >= 1.14.5',
+    'numpy >= 1.20',
     'opt_einsum >= 2.3.2',
     'protobuf >= 3.9.2',
-    'setuptools < 60',  # TODO(b/211495558): Breaking change in v60 on distutils
+    'setuptools',
     'six >= 1.12.0',
     'termcolor >= 1.1.0',
     'typing_extensions >= 3.6.6',
@@ -91,7 +91,7 @@ REQUIRED_PACKAGES = [
     # These need to be in sync with the existing TF version
     # They are updated during the release process
     # When updating these, please also update the nightly versions below
-    'tensorboard >= 2.7, < 2.8',
+    'tensorboard >= 2.8, < 2.9',
     'tf-estimator-nightly == 2.8.0.dev2021122109',
     'keras >= 2.8.0rc0, < 2.9',
     'tensorflow-io-gcs-filesystem >= 0.23.1',
@@ -106,7 +106,7 @@ REQUIRED_PACKAGES = [
 if 'tf_nightly' in project_name:
   for i, pkg in enumerate(REQUIRED_PACKAGES):
     if 'tensorboard' in pkg:
-      REQUIRED_PACKAGES[i] = 'tb-nightly ~= 2.8.0.a'
+      REQUIRED_PACKAGES[i] = 'tb-nightly ~= 2.9.0.a'
     elif 'tensorflow_estimator' in pkg:
       REQUIRED_PACKAGES[i] = 'tf-estimator-nightly ~= 2.9.0.dev'
     elif 'keras' in pkg and 'keras_preprocessing' not in pkg:
