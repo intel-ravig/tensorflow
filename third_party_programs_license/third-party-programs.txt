@@ -2209,14 +2209,13 @@ OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 The following third party programs have their own third party program files. These additional third party program files are as follows:
 
 1. oneAPI Deep Neural Network Library (oneDNN): ./third_party_programs_license/oneDNN-THIRD-PARTY-PROGRAMS
-2. Intel® Optimization for TensorFlow*(Intel tensorflow): ./third_party_programs_license/third-party-programs.txt
 
 
 ---------------------------------------------------------------------------------------------------------------------
 
 The docker container layers depends on the use of the following additional layers.
-1.      tensorflow/tensorflow:2.7.0 ; https://hub.docker.com/layers/tensorflow/tensorflow using the 2.7.0 tag
-2.      tensorflow/tensorflow:2.7.0-jupyter ; https://hub.docker.com/layers/tensorflow/tensorflow using the 2.7.0-jupyter tag
+1.      tensorflow/tensorflow:2.8.0 ; https://hub.docker.com/layers/tensorflow/tensorflow using the 2.8.0 tag
+2.      tensorflow/tensorflow:2.8.0-jupyter ; https://hub.docker.com/layers/tensorflow/tensorflow using the 2.8.0-jupyter tag
 
 ---------------------------------------------------------------------------------------------------------------------
 
