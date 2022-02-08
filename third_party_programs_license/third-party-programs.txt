@@ -74,9 +74,9 @@ Third party programs and their corresponding required notices and/or license ter
     tensorflow
     Copyright 2019 The TensorFlow Authors.  All rights reserved.
 
-    tensorflow/tensorflow:2.7.0 (docker base layer)
+    tensorflow/tensorflow:2.8.0 (docker base layer)
 
-    tensorflow/tensorflow:2.7.0-jupyter (docker base layer)
+    tensorflow/tensorflow:2.8.0-jupyter (docker base layer)
 
 
 	Apache License 2.0
