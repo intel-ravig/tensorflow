@@ -23,6 +23,12 @@ ARG TF_NIGHTLY_FLAG=""
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+RUN apt-get update -y && \
+    apt-get upgrade -y && \
+    apt-get --no-install-recommends --fix-missing -y install \
+        git \
+        unzip
+
 # Upgrade Bazel version if argument is passed
 RUN if [ "${BAZEL_VERSION}" != "" ]; then \
         curl -fSsL -O https://github.com/bazelbuild/bazel/releases/download/$BAZEL_VERSION/bazel-$BAZEL_VERSION-installer-linux-x86_64.sh && \
@@ -56,6 +62,7 @@ RUN echo "import /root/.mkl.bazelrc" >>/root/.bazelrc
 RUN ${PIP} install future>=0.17.1
 
 RUN bazel --bazelrc=/root/.bazelrc build -c opt \
+    --define=no_tensorflow_py_deps=true \
     tensorflow/tools/pip_package:build_pip_package && \
     bazel-bin/tensorflow/tools/pip_package/build_pip_package "${TF_NIGHTLY_FLAG}" "${WHL_DIR}" && \
     ${PIP} --no-cache-dir install --upgrade "${WHL_DIR}"/*.whl && \
