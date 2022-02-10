@@ -43,6 +43,7 @@ PACKAGES=(
   "protobuf"
   "scipy"
   "scikit-learn"
+  "packaging"
   "pandas"
   "psutil"
   "py-cpuinfo"
