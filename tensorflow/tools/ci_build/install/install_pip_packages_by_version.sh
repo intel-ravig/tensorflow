@@ -58,7 +58,7 @@ PACKAGES=(
   "keras_preprocessing"
   "h5py"
   "tf-estimator-nightly"
-  "tb-nightly"
+  "tb-nightly>=2.9.0a20220210"
   "argparse"
   "dm-tree"
   "dill"
