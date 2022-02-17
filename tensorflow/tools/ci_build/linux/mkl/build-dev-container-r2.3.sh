@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 export BAZEL_VERSION=3.1.0
-export BUILD_AVX2_CONTAINERS=yes
+export BUILD_AVX2_CONTAINERS=no
 export BUILD_AVX_CONTAINERS=no
 export BUILD_CLX_CONTAINERS=no
 export BUILD_PY2_CONTAINERS=no
