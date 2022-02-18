@@ -23,6 +23,12 @@ ARG TF_NIGHTLY_FLAG=""
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+RUN apt-get update -y && \
+    apt-get upgrade -y && \
+    apt-get --no-install-recommends --fix-missing -y install \
+        git \
+        unzip
+
 # Upgrade Bazel version if argument is passed
 RUN if [ "${BAZEL_VERSION}" != "" ]; then \
         curl -fSsL -O https://github.com/bazelbuild/bazel/releases/download/$BAZEL_VERSION/bazel-$BAZEL_VERSION-installer-linux-x86_64.sh && \
@@ -55,7 +61,20 @@ RUN echo "import /root/.mkl.bazelrc" >>/root/.bazelrc
 # Install futures>=0.17.1 for Python2.7 compatibility mode
 RUN ${PIP} install future>=0.17.1
 
+RUN apt-get install -y linux-headers-5.4.0-66-generic
+RUN cd /tmp && curl -fSsL -O https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB && \
+    apt-key add GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB && \
+    rm GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB && \
+    echo "deb https://apt.repos.intel.com/oneapi all main" | tee /etc/apt/sources.list.d/oneAPI.list && \
+    apt-get update -y && \
+    apt-get install -y intel-basekit-2021.4.0
+
+ENV TF_MKL_ROOT="/opt/intel/oneapi/mkl/2021.4.0"
+RUN cp ${TF_MKL_ROOT}/../../compiler/2021.4.0/linux/compiler/lib/intel64_lin/libiomp5.so ${TF_MKL_ROOT}/lib/intel64/ && \
+    cp ${TF_MKL_ROOT}/licensing/license.txt ${TF_MKL_ROOT}/
+
 RUN bazel --bazelrc=/root/.bazelrc build -c opt \
+    --define=no_tensorflow_py_deps=true \
     tensorflow/tools/pip_package:build_pip_package && \
     bazel-bin/tensorflow/tools/pip_package/build_pip_package "${TF_NIGHTLY_FLAG}" "${WHL_DIR}" && \
     ${PIP} --no-cache-dir install --upgrade "${WHL_DIR}"/*.whl && \
