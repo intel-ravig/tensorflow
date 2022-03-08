@@ -42,10 +42,10 @@ function set_remote_cache_options {
 function create_python_test_dir() {
   rm -rf "$1"
   mkdir -p "$1"
-  cmd /c "mklink /J $1\\tensorflow .\\tensorflow"
+  cmd //c "mklink /J $1\\tensorflow .\\tensorflow"
 }
 
 function reinstall_tensorflow_pip() {
   echo "y" | pip uninstall tensorflow -q || true
-  pip install ${1} --no-deps
+  pip install ${1}
 }
