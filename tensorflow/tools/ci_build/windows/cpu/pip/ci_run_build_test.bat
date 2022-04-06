@@ -6,7 +6,7 @@ rem We also assume a few Software components are also installed in the machine: 
 rem Assuming, the user has already git cloned the TF repo to %WORKSPACE%\tensorflow (aka %TF_LOCATION%)
 rem Assuming, the user has already created a Python 3.8 virtual env at location %WSVENVDIR%
 rem We also assume, a set of Python modules (pip) are installed, e.g.
-rem absl-py astunparse flatbuffers google_pasta h5py keras-nightly keras_preprocessing numpy opt_einsum protobuf scipy six termcolor typing_extensions wheel wrapt gast tensorboard tf-estimator-nightly packaging portpicker
+pip install absl-py astunparse flatbuffers google_pasta h5py keras-nightly keras_preprocessing numpy opt_einsum protobuf scipy six termcolor typing_extensions wheel wrapt gast tensorboard tf-estimator-nightly packaging portpicker
 
 rem first run this separately in cmd prompt:
 rem C:\Jenkins\workspace\tensorflow-eigen-test-win\venv38\Scripts\activate
