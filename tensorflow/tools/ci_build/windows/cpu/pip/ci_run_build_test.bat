@@ -72,9 +72,9 @@ where bazel
 cd %TF_LOCATION%
 bazel version
 
-rem echo "Updating PYTHON_BIN_PATH & PYTHON_LIB_PATH env vars in common_env.sh"
-rem echo export PYTHON_BIN_PATH=%PYTHON_BIN_PATH% >> %WORKSPACE%\tensorflow\tensorflow\tools\ci_build\windows\bazel\common_env.sh
-rem echo export PYTHON_LIB_PATH=%PYTHON_LIB_PATH% >> %WORKSPACE%\tensorflow\tensorflow\tools\ci_build\windows\bazel\common_env.sh
+echo "Updating PYTHON_BIN_PATH & PYTHON_LIB_PATH env vars in common_env.sh"
+echo export PYTHON_BIN_PATH=%PYTHON_BIN_PATH% >> %WORKSPACE%\tensorflow\tensorflow\tools\ci_build\windows\bazel\common_env.sh
+echo export PYTHON_LIB_PATH=%PYTHON_LIB_PATH% >> %WORKSPACE%\tensorflow\tensorflow\tools\ci_build\windows\bazel\common_env.sh
 
 rem yes "" | python configure.py
 rem C:\Jenkins\workspace\tensorflow-eigen-test-win\tensorflow> bash -l c:\Jenkins\workspace\tensorflow-eigen-test-win\tensorflow/tensorflow/tools/ci_build/windows/cpu/pip/build_tf_windows.sh --extra_build_flags "--action_env=TEMP=C:\tmp --action_env=TMP=C:\tmp" --extra_test_flags "--action_env=TEMP=C:\tmp --action_env=TMP=C:\tmp"  >C:\tmp\build.log 2>&1
