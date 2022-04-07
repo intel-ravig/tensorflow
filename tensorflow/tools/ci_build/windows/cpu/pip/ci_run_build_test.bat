@@ -16,19 +16,13 @@ rem Then invoke build/test scripts (see comments at end of this script)
 rem The following env vars will be set by the caller
 rem set WORKSPACE=C:\Jenkins\workspace\tensorflow-eigen-test-win
 rem set PYTHON_VERSION=38
+rem set WSVENVDIR=%WORKSPACE%\venv%PYTHON_VERSION%
 
-set WSVENVDIR=%WORKSPACE%\venv%PYTHON_VERSION%
-set PYTHON_LOCATION=C:\Program Files\Python%PYTHON_VERSION%
-rem activate python and install pip packages.
-
-echo Creating virtualenv from %PYTHON_LOCATION%
-virtualenv -p "%PYTHON_LOCATION%\python.exe" --clear %WSVENVDIR%
-
-%WSVENVDIR%\Scripts\activate
 where python
 python --version
 
-pip install absl-py astunparse flatbuffers google_pasta h5py keras-nightly keras_preprocessing numpy opt_einsum protobuf scipy six termcolor typing_extensions wheel wrapt gast tensorboard tf-estimator-nightly packaging portpicker
+rem install pip packages.
+pip install absl-py astunparse flatbuffers google_pasta h5py keras-nightly keras_preprocessing numpy opt_einsum protobuf scipy six termcolor typing_extensions wheel wrapt gast tensorboard tf-estimator-nightly packaging portpicker %PIP_MODULES%
 
 
 for /f "delims=" %%i in ('cygpath -m %WSVENVDIR%') do set WSVENVDIRUNIX=%%i
