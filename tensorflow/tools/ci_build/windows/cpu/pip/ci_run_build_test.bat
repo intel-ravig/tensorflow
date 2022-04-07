@@ -18,7 +18,7 @@ rem set WORKSPACE=C:\Jenkins\workspace\tensorflow-eigen-test-win
 rem set PYTHON_VERSION=38
 
 set WSVENVDIR=%WORKSPACE%\venv%PYTHON_VERSION%
-set PYTHON_LOCATION=C:\Program Files\%PYTHON_VERSION%
+set PYTHON_LOCATION=C:\Program Files\Python%PYTHON_VERSION%
 rem activate python and install pip packages.
 
 echo Creating virtualenv from %PYTHON_LOCATION%
