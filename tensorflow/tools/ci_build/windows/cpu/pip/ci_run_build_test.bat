@@ -22,7 +22,7 @@ set PYTHON_LOCATION=C:\Program Files\%PYTHON_VERSION%
 rem activate python and install pip packages.
 
 echo Creating virtualenv from %PYTHON_LOCATION%
-virtualenv -p "%PYTHON_LOCATION%\\python.exe" --clear %WSVENVDIR%
+virtualenv -p "%PYTHON_LOCATION%\python.exe" --clear %WSVENVDIR%
 
 %WSVENVDIR%\Scripts\activate
 where python
