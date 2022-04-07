@@ -6,16 +6,25 @@ rem We also assume a few Software components are also installed in the machine: 
 rem Assuming, the user has already git cloned the TF repo to %WORKSPACE%\tensorflow (aka %TF_LOCATION%)
 rem Assuming, the user has already created a Python 3.8 virtual env at location %WSVENVDIR%
 rem We also assume, a set of Python modules (pip) are installed, e.g.
-pip install absl-py astunparse flatbuffers google_pasta h5py keras-nightly keras_preprocessing numpy opt_einsum protobuf scipy six termcolor typing_extensions wheel wrapt gast tensorboard tf-estimator-nightly packaging portpicker
+
 
 rem first run this separately in cmd prompt:
 rem C:\Jenkins\workspace\tensorflow-eigen-test-win\venv38\Scripts\activate
 rem Then run this bat file to set env vars => C:\...\...\setup_venv38.bat
 rem Then invoke build/test scripts (see comments at end of this script)
 
-set WORKSPACE=C:\Jenkins\workspace\tensorflow-eigen-test-win
-set PYTHON_VERSION=38
+rem The following env vars will be set by the caller
+rem set WORKSPACE=C:\Jenkins\workspace\tensorflow-eigen-test-win
+rem set PYTHON_VERSION=38
+
 set WSVENVDIR=%WORKSPACE%\venv%PYTHON_VERSION%
+rem activate python and install pip packages.
+
+%WSVENVDIR%\Scripts\activate
+
+pip install absl-py astunparse flatbuffers google_pasta h5py keras-nightly keras_preprocessing numpy opt_einsum protobuf scipy six termcolor typing_extensions wheel wrapt gast tensorboard tf-estimator-nightly packaging portpicker
+
+
 for /f "delims=" %%i in ('cygpath -m %WSVENVDIR%') do set WSVENVDIRUNIX=%%i
 set TMP=C:\tmp
 set TEMP=C:\tmp
@@ -79,5 +88,5 @@ rem echo export PYTHON_LIB_PATH=%PYTHON_LIB_PATH% >> %WORKSPACE%\tensorflow\tens
 rem yes "" | python configure.py
 rem C:\Jenkins\workspace\tensorflow-eigen-test-win\tensorflow> bash -l c:\Jenkins\workspace\tensorflow-eigen-test-win\tensorflow/tensorflow/tools/ci_build/windows/cpu/pip/build_tf_windows.sh --extra_build_flags "--action_env=TEMP=C:\tmp --action_env=TMP=C:\tmp" --extra_test_flags "--action_env=TEMP=C:\tmp --action_env=TMP=C:\tmp"  >C:\tmp\build.log 2>&1
 
-yes "" | python configure.py
+rem yes "" | python configure.py
 bash -l %WORKSPACE%\tensorflow/tensorflow/tools/ci_build/windows/cpu/pip/build_tf_windows.sh --extra_build_flags "--action_env=TEMP=%TMP% --action_env=TMP=%TMP%" --extra_test_flags "--action_env=TEMP=%TMP% --action_env=TMP=%TMP%"
