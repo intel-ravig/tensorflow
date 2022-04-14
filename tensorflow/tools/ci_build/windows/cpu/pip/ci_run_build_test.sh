@@ -16,11 +16,16 @@
 set -x
 set -e
 
+# bazelisk (renamed as bazel) is kept in C:\Tools
+export PATH="/c/Tools:/c/msys64:/c/msys64/usr/bin:/c/Program Files/Git:/c/Windows/system32:/c/Windows:/c/Windows/System32/Wbem"
+
 # Environment variables to be set by Jenkins before calling this script
 # 
 
 export PYTHON_VERSION=${PYTHON_VERSION:-"310"}  #We expect Python installation as C:\Python39
-export MYTFWS_ROOT=${WORKSPACE:-"C:/Users/mlp_admin"} # keep the tensorflow git repo clone under here as tensorflow subdir
+MYTFWS_ROOT=${WORKSPACE:-"C:/Users/mlp_admin"} # keep the tensorflow git repo clone under here as tensorflow subdir
+MYTFWS_ROOT=`cygpath -m $MYTFWS_ROOT`
+export MYTFWS_ROOT="$MYTFWS_ROOT"
 export MYTFWS_NAME="tensorflow"
 export MYTFWS="${MYTFWS_ROOT}/${MYTFWS_NAME}"
 
@@ -40,9 +45,6 @@ export JAVA_LOCATION='C:/Program Files/Eclipse Adoptium/jdk-11.0.14.101-hotspot'
 export VS_LOCATION='C:/Program Files (x86)/Microsoft Visual Studio/2019/BuildTools'
 export NATIVE_PYTHON_LOCATION="C:/Python${PYTHON_VERSION}"
 
-
-# bazelisk (renamed as bazel) is kept in C:\Tools
-export PATH="/c/Tools:/c/msys64:/c/msys64/usr/bin:/c/Program Files/Git:/c/Windows/system32:/c/Windows:/c/Windows/System32/Wbem"
 
 #which bazel
 #which git
