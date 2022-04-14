@@ -47,6 +47,9 @@ export PATH="/c/Tools:/c/msys64:/c/msys64/usr/bin:/c/Program Files/Git:/c/Window
 #which bazel
 #which git
 [[ -e "$NATIVE_PYTHON_LOCATION/python.exe" ]] || { echo "Specified Python path is incorrect: $NATIVE_PYTHON_LOCATION"; exit 1;}
+[[ -e "$NATIVE_PYTHON_LOCATION/Scripts/pip.exe" ]] || { echo "Specified Python path has no pip: $NATIVE_PYTHON_LOCATION"; exit 1;}
+[[ -e "$NATIVE_PYTHON_LOCATION/Lib/venv" ]] || { echo "Specified Python path has no venv: $NATIVE_PYTHON_LOCATION"; exit 1;}
+
 $NATIVE_PYTHON_LOCATION/python.exe -m pip list
 
 # =========================== Start of actual script =========================
