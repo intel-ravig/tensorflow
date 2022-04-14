@@ -17,7 +17,7 @@ set -x
 set -e
 
 # bazelisk (renamed as bazel) is kept in C:\Tools
-export PATH="/c/Tools:/c/msys64:/c/msys64/usr/bin:/c/Program Files/Git:/c/Windows/system32:/c/Windows:/c/Windows/System32/Wbem:$PATH"
+export PATH=/c/Tools:/c/msys64:/c/msys64/usr/bin:/c/Program Files/Git:/c/Windows/system32:/c/Windows:/c/Windows/System32/Wbem:$PATH
 
 # Environment variables to be set by Jenkins before calling this script
 # 
