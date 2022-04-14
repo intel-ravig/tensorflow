@@ -17,7 +17,7 @@ set -x
 set -e
 
 # bazelisk (renamed as bazel) is kept in C:\Tools
-export PATH="/c/Tools:/c/msys64:/c/msys64/usr/bin:/c/Program Files/Git:/c/Windows/system32:/c/Windows:/c/Windows/System32/Wbem"
+export PATH="/c/Tools:/c/msys64:/c/msys64/usr/bin:/c/Program Files/Git:/c/Windows/system32:/c/Windows:/c/Windows/System32/Wbem:$PATH"
 
 # Environment variables to be set by Jenkins before calling this script
 # 
@@ -46,8 +46,8 @@ export VS_LOCATION='C:/Program Files (x86)/Microsoft Visual Studio/2019/BuildToo
 export NATIVE_PYTHON_LOCATION="C:/Python${PYTHON_VERSION}"
 
 
-#which bazel
-#which git
+which bazel
+which git
 [[ -e "$NATIVE_PYTHON_LOCATION/python.exe" ]] || { echo "Specified Python path is incorrect: $NATIVE_PYTHON_LOCATION"; exit 1;}
 [[ -e "$NATIVE_PYTHON_LOCATION/Scripts/pip.exe" ]] || { echo "Specified Python path has no pip: $NATIVE_PYTHON_LOCATION"; exit 1;}
 [[ -e "$NATIVE_PYTHON_LOCATION/Lib/venv" ]] || { echo "Specified Python path has no venv: $NATIVE_PYTHON_LOCATION"; exit 1;}
