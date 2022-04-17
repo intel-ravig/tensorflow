@@ -98,6 +98,7 @@ export BAZEL_VC=${VS_LOCATION}/VC
 export JAVA_HOME=${JAVA_LOCATION}
 export BAZEL_SH="${MSYS_LOCATION}"/usr/bin/bash.exe
 
+mkdir -p "$TMP"
 
 cd $MYTFWS
 echo 
