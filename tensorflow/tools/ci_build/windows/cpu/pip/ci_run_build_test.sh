@@ -103,7 +103,7 @@ mkdir -p "$TMP"
 cd $MYTFWS
 echo 
 bash "${MYTFWS}"/tensorflow/tools/ci_build/windows/cpu/pip/build_tf_windows.sh --extra_build_flags \
-   "--action_env=TEMP=${TMP} --action_env=TMP=${TMP}" --extra_test_flags "--action_env=TEMP=${TMP} --action_env=TMP=${TMP} "  > run.log 2>&1
+   "--action_env=TEMP=${TMP} --action_env=TMP=${TMP}" --extra_test_flags "--action_env=TEMP=${TMP} --action_env=TMP=${TMP} "  > run.log 2>&1 || true
    
 # process results
 cd $MYTFWS_ROOT
