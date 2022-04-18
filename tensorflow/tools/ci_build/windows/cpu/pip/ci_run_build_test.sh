@@ -107,7 +107,23 @@ bash "${MYTFWS}"/tensorflow/tools/ci_build/windows/cpu/pip/build_tf_windows.sh -
    
 # process results
 cd $MYTFWS_ROOT
-cp "${MYTFWS}"/run.log .
-fgrep -e 'FAILED: Build did NOT complete' -e "Executed" run.log  > summary.log
-fgrep "FAILED" run.log | grep "out of" | sed 's/[ ][ ]*.*//' > test_failures.log
-fgrep "TIMEOUT:" run.log | cut -d' ' -f2 | awk -F'/' '{OFS="/"} $7="/" {print  "TIMEOUT: "$7,$3,$4,$5,$6}' >> test_failures.log
+
+# remove old logs
+rm -f summary.log test_failures.log test_run.log 
+
+# Check to make sure log was created.
+[ ! -f "${MYTFWS}"/run.log  ] && exit 1
+
+cp "${MYTFWS}"/run.log ./test_run.log
+
+ret=0
+fgrep "FAILED: Build did NOT complete" test_run.log > summary.log
+[ $? -eq 0 ] && ret=1
+fgrep "Executed" test_run.log >> summary.log
+fgrep "FAILED" test_run.log | grep "out of" | sed -e 's/[ ][ ]*.*//' -e 's/$/ FAILED/' > test_failures.log
+count=$(wc -l < test_failures.log)
+[ $count -gt 0 ] && ret=1
+fgrep "TIMEOUT:" test_run.log | cut -d' ' -f2 | awk -F'/' '{OFS="/"} $7="/" {print "TIMEOUT: "$7,$3,$4,$5,$6}' >> test_failures.log
+
+exit $ret
+
