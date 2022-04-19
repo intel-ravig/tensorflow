@@ -28,6 +28,7 @@ MYTFWS_ROOT=`cygpath -m $MYTFWS_ROOT`
 export MYTFWS_ROOT="$MYTFWS_ROOT"
 export MYTFWS_NAME="tensorflow"
 export MYTFWS="${MYTFWS_ROOT}/${MYTFWS_NAME}"
+export MYTFWS_ARTIFACT="${MYTFWS_ROOT}/artifact"
 
 
 export TF_LOCATION=%MYTFWS%
@@ -99,20 +100,37 @@ export JAVA_HOME=${JAVA_LOCATION}
 export BAZEL_SH="${MSYS_LOCATION}"/usr/bin/bash.exe
 
 mkdir -p "$TMP"
+# remove old logs
+rm -f summary.log test_failures.log test_run.log
+rm -rf ${MYTFWS_ARTIFACT}
+mkdir -p ${MYTFWS_ARTIFACT}
 
+set +e   # Unset so script continues even if commands fail, this is needed to correctly process the logs
 cd $MYTFWS
-echo 
+
 bash "${MYTFWS}"/tensorflow/tools/ci_build/windows/cpu/pip/build_tf_windows.sh --extra_build_flags \
-   "--action_env=TEMP=${TMP} --action_env=TMP=${TMP}" --extra_test_flags "--action_env=TEMP=${TMP} --action_env=TMP=${TMP} "  > run.log 2>&1 || true
+   "--action_env=TEMP=${TMP} --action_env=TMP=${TMP}" --extra_test_flags "--action_env=TEMP=${TMP} --action_env=TMP=${TMP} "  > run.log 2>&1
+
+build_ret_val=$?   # Store the ret value
    
 # process results
 cd $MYTFWS_ROOT
 
-# remove old logs
-rm -f summary.log test_failures.log test_run.log 
-
 # Check to make sure log was created.
 [ ! -f "${MYTFWS}"/run.log  ] && exit 1
+
+# Handle the case when only whl are built
+if [[ "$TF_NIGHTLY" = 1 ]]; then
+  if [[ $build_ret_val -eq 0 ]]; then
+    cp ${MYTFWS}/py_test_dir/*.whl ${MYTFWS_ARTIFACT}
+  else
+    # build failed just copy the log, mark log with py version.
+    cp "${MYTFWS}"/run.log ${MYTFWS_ARTIFACT}/test_run_${PYTHON_VERSION}.log
+  fi
+  exit $build_ret_val
+fi
+
+
 
 cp "${MYTFWS}"/run.log ./test_run.log
 
