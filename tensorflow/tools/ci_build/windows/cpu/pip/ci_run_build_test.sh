@@ -163,9 +163,9 @@ fgrep "FAILED: Build did NOT complete" test_run.log > summary.log
 [ $? -eq 0 ] && ret=1
 fgrep "Executed" test_run.log >> summary.log
 fgrep "FAILED" test_run.log | grep "out of" | sed -e 's/[ ][ ]*.*//' -e 's/$/ FAILED/' > test_failures.log
+fgrep "TIMEOUT" test_run.log | grep "out of" | sed -e 's/[ ][ ]*.*//' -e 's/$/ TIEMOUT/' >> test_failures.log
 count=$(wc -l < test_failures.log)
 [ $count -gt 0 ] && ret=1
-fgrep "TIMEOUT:" test_run.log | cut -d' ' -f2 | awk -F'/' '{OFS="/"} $7="/" {print "TIMEOUT: "$7,$3,$4,$5,$6}' >> test_failures.log
 
 exit $ret
 
