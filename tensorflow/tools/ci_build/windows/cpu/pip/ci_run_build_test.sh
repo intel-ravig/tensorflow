@@ -136,6 +136,7 @@ cd $MYTFWS_ROOT
 # copy back build_tf_windows.sh (workaround)
 if [[ -f "${MYTFWS}"/tensorflow/tools/ci_build/windows/cpu/pip/build_tf_windows.sh.saved  ]]; then
   mv ${MYTFWS}/tensorflow/tools/ci_build/windows/cpu/pip/build_tf_windows.sh.saved ${MYTFWS}/tensorflow/tools/ci_build/windows/cpu/pip/build_tf_windows.sh
+fi
 # end workaround
 
 # Check to make sure log was created.
@@ -153,7 +154,8 @@ if [[ "$TF_NIGHTLY" = 1 ]]; then
 fi
 
 
-
+# handle logs for unit test
+cd ${MYTFWS_ARTIFACT}
 cp "${MYTFWS}"/run.log ./test_run.log
 
 ret=0
