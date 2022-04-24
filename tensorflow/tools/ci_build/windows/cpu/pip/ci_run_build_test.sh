@@ -133,6 +133,11 @@ build_ret_val=$?   # Store the ret value
 # process results
 cd $MYTFWS_ROOT
 
+# copy back build_tf_windows.sh (workaround)
+if [[ -f "${MYTFWS}"/tensorflow/tools/ci_build/windows/cpu/pip/build_tf_windows.sh.saved  ]]; then
+  mv ${MYTFWS}/tensorflow/tools/ci_build/windows/cpu/pip/build_tf_windows.sh.saved ${MYTFWS}/tensorflow/tools/ci_build/windows/cpu/pip/build_tf_windows.sh
+# end workaround
+
 # Check to make sure log was created.
 [ ! -f "${MYTFWS}"/run.log  ] && exit 1
 
