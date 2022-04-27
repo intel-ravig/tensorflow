@@ -16,6 +16,8 @@
 set -x
 #set -e
 
+SCRIPT_ARGS="$@"
+
 # bazelisk (renamed as bazel) is kept in C:\Tools
 export PATH=/c/Tools/bazel:/c/Program\ Files/Git:/c/Program\ Files/Git/cmd:/c/msys64:/c/msys64/usr/bin:/c/Windows/system32:/c/Windows:/c/Windows/System32/Wbem
 
@@ -126,7 +128,7 @@ fi
 cd $MYTFWS
 
 bash "${MYTFWS}"/tensorflow/tools/ci_build/windows/cpu/pip/build_tf_windows.sh --extra_build_flags \
-   "--action_env=TEMP=${TMP} --action_env=TMP=${TMP}" --extra_test_flags "--action_env=TEMP=${TMP} --action_env=TMP=${TMP} "  > run.log 2>&1
+   "--action_env=TEMP=${TMP} --action_env=TMP=${TMP}" --extra_test_flags "--action_env=TEMP=${TMP} --action_env=TMP=${TMP}" "$SCRIPT_ARGS"  > run.log 2>&1
 
 build_ret_val=$?   # Store the ret value
    
