@@ -16,28 +16,29 @@
 set -x
 #set -e
 
+POSITIONAL_ARGS=()
 XBF_ARGS=""
 XTF_ARGS=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --extra_build_flags)
-      shift
-      if [[ -z "$1" ]]; then
-        break
-      fi
-      XBF_ARGS="$1"
+      XBF_ARGS="$2"
+      shift # past argument
+      shift # past value
       ;;
     --extra_test_flags)
-      shift
-      if [[ -z "$1" ]]; then
-        break
-      fi
-      XTF_ARGS="$1"
+      XTF_ARGS="$2"
+      shift # past argument
+      shift # past value
       ;;
     *)
+      POSITIONAL_ARGS+=("$1") # save positional arg
+      shift # past argument
+      ;;
   esac
 done
-SCRIPT_ARGS="$@"
+
+#SCRIPT_ARGS=${POSITIONAL_ARGS[@]}
 
 # bazelisk (renamed as bazel) is kept in C:\Tools
 export PATH=/c/Tools/bazel:/c/Program\ Files/Git:/c/Program\ Files/Git/cmd:/c/msys64:/c/msys64/usr/bin:/c/Windows/system32:/c/Windows:/c/Windows/System32/Wbem
@@ -137,9 +138,9 @@ set +e   # Unset so script continues even if commands fail, this is needed to co
 cd $MYTFWS
 
 bash "${MYTFWS}"/tensorflow/tools/ci_build/windows/cpu/pip/build_tf_windows.sh \
-   --extra_build_flags "--action_env=TEMP=${TMP} --action_env=TMP=${TMP} ${XBF_ARGS}" \
-   --extra_test_flags "--action_env=TEMP=${TMP} --action_env=TMP=${TMP} ${XTF_ARGS}" \
-   ${SCRIPT_ARGS}  > run.log 2>&1
+   --extra_build_flags \"--action_env=TEMP=${TMP} --action_env=TMP=${TMP} ${XBF_ARGS}\" \
+   --extra_test_flags \"--action_env=TEMP=${TMP} --action_env=TMP=${TMP} ${XTF_ARGS}\" \
+   ${POSITIONAL_ARGS[@]}  > run.log 2>&1
 
 build_ret_val=$?   # Store the ret value
    
