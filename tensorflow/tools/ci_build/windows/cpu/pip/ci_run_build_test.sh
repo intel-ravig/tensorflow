@@ -70,7 +70,7 @@ export JAVA_LOCATION='C:/Program Files/Eclipse Adoptium/jdk-11.0.14.101-hotspot'
 export VS_LOCATION='C:/Program Files (x86)/Microsoft Visual Studio/2019/BuildTools'
 export NATIVE_PYTHON_LOCATION="C:/Python${PYTHON_VERSION}"
 
-
+echo "*** *** hostname is $(hostname) *** ***"
 which bazel
 which git
 [[ -e "$NATIVE_PYTHON_LOCATION/python.exe" ]] || { echo "Specified Python path is incorrect: $NATIVE_PYTHON_LOCATION"; exit 1;}
