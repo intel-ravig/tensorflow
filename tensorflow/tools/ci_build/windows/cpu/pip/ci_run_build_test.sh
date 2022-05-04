@@ -16,7 +16,29 @@
 set -x
 #set -e
 
-SCRIPT_ARGS="$@"
+POSITIONAL_ARGS=()
+XBF_ARGS=""
+XTF_ARGS=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --extra_build_flags)
+      XBF_ARGS="$2"
+      shift # past argument
+      shift # past value
+      ;;
+    --extra_test_flags)
+      XTF_ARGS="$2"
+      shift # past argument
+      shift # past value
+      ;;
+    *)
+      POSITIONAL_ARGS+=("$1") # save positional arg
+      shift # past argument
+      ;;
+  esac
+done
+
+#SCRIPT_ARGS=${POSITIONAL_ARGS[@]}
 
 # bazelisk (renamed as bazel) is kept in C:\Tools
 export PATH=/c/Tools/bazel:/c/Program\ Files/Git:/c/Program\ Files/Git/cmd:/c/msys64:/c/msys64/usr/bin:/c/Windows/system32:/c/Windows:/c/Windows/System32/Wbem
@@ -48,7 +70,7 @@ export JAVA_LOCATION='C:/Program Files/Eclipse Adoptium/jdk-11.0.14.101-hotspot'
 export VS_LOCATION='C:/Program Files (x86)/Microsoft Visual Studio/2019/BuildTools'
 export NATIVE_PYTHON_LOCATION="C:/Python${PYTHON_VERSION}"
 
-
+echo "*** *** hostname is $(hostname) *** ***"
 which bazel
 which git
 [[ -e "$NATIVE_PYTHON_LOCATION/python.exe" ]] || { echo "Specified Python path is incorrect: $NATIVE_PYTHON_LOCATION"; exit 1;}
@@ -101,45 +123,29 @@ export BAZEL_VC=${VS_LOCATION}/VC
 export JAVA_HOME=${JAVA_LOCATION}
 export BAZEL_SH="${MSYS_LOCATION}"/usr/bin/bash.exe
 
+cd ${MYTFWS_ROOT}
 mkdir -p "$TMP"
 # remove old logs
-rm -f summary.log test_failures.log test_run.log
+#rm -f summary.log test_failures.log test_run.log
+mv summary.log summary.log.bak
+mv test_failures.log test_failures.log.bak
+mv test_run.log test_run.log.bak
 rm -rf ${MYTFWS_ARTIFACT}
 mkdir -p ${MYTFWS_ARTIFACT}
 
 set +e   # Unset so script continues even if commands fail, this is needed to correctly process the logs
 
-# Temp workaround to skip some failing tests
-if [[ "$SKIP_TESTS" = "" ]] ; then
-  # If SKIP_TESTS is not already set then set it to the ones that need to be skipped.
-  export SKIP_TESTS=" -//py_test_dir/tensorflow/python/kernel_tests/summary_ops:summary_ops_test_cpu -//py_test_dir/tensorflow/python/kernel_tests/signal:window_ops_test_cpu"
-fi
-
-fgrep SKIP_TESTS ${MYTFWS}/tensorflow/tools/ci_build/windows/cpu/pip/build_tf_windows.sh
-
-#if build_tf_windows.sh has aleardy been pached to skip tests, then do nothing, otherwise patch it.
-if [[ $? -eq 1 ]] ; then
-  sed 's/^TEST_TARGET=\(.*\)/TEST_TARGET="-- "\1" $SKIP_TESTS"/' ${MYTFWS}/tensorflow/tools/ci_build/windows/cpu/pip/build_tf_windows.sh > /tmp/tmp.$$
-  cp ${MYTFWS}/tensorflow/tools/ci_build/windows/cpu/pip/build_tf_windows.sh ${MYTFWS}/tensorflow/tools/ci_build/windows/cpu/pip/build_tf_windows.sh.saved
-  mv /tmp/tmp.$$ ${MYTFWS}/tensorflow/tools/ci_build/windows/cpu/pip/build_tf_windows.sh
-fi
-# end of work around
-
 cd $MYTFWS
 
-bash "${MYTFWS}"/tensorflow/tools/ci_build/windows/cpu/pip/build_tf_windows.sh --extra_build_flags \
-   "--action_env=TEMP=${TMP} --action_env=TMP=${TMP}" --extra_test_flags "--action_env=TEMP=${TMP} --action_env=TMP=${TMP}" "$SCRIPT_ARGS"  > run.log 2>&1
+bash "${MYTFWS}"/tensorflow/tools/ci_build/windows/cpu/pip/build_tf_windows.sh \
+   --extra_build_flags "--action_env=TEMP=${TMP} --action_env=TMP=${TMP} ${XBF_ARGS}" \
+   --extra_test_flags "--action_env=TEMP=${TMP} --action_env=TMP=${TMP} ${XTF_ARGS}" \
+   ${POSITIONAL_ARGS[@]}  > run.log 2>&1
 
 build_ret_val=$?   # Store the ret value
    
 # process results
 cd $MYTFWS_ROOT
-
-# copy back build_tf_windows.sh (workaround)
-if [[ -f "${MYTFWS}"/tensorflow/tools/ci_build/windows/cpu/pip/build_tf_windows.sh.saved  ]]; then
-  mv ${MYTFWS}/tensorflow/tools/ci_build/windows/cpu/pip/build_tf_windows.sh.saved ${MYTFWS}/tensorflow/tools/ci_build/windows/cpu/pip/build_tf_windows.sh
-fi
-# end workaround
 
 # Check to make sure log was created.
 [ ! -f "${MYTFWS}"/run.log  ] && exit 1
@@ -170,4 +176,3 @@ count=$(wc -l < test_failures.log)
 [ $count -gt 0 ] && ret=1
 
 exit $ret
-
