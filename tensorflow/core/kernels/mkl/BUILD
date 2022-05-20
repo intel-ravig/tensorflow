@@ -495,7 +495,10 @@ tf_mkl_kernel_library(
     srcs = [
         "mkl_transpose_op.cc",
     ],
-    deps = MKL_DEPS + ["//tensorflow/core/kernels:transpose_op"],
+    deps = MKL_DEPS + [
+        "//tensorflow/core/kernels:no_op",
+        "//tensorflow/core/kernels:transpose_op",
+    ],
 )
 
 tf_cc_test_mkl(
@@ -506,5 +509,16 @@ tf_cc_test_mkl(
     deps = [
         "//tensorflow/core/kernels:matmul_op",
         "//tensorflow/core/kernels/mkl:mkl_matmul_op",
+    ] + MKL_TEST_DEPS,
+)
+
+tf_cc_test_mkl(
+    name = "onednn_transpose_op_test",
+    size = "medium",
+    srcs = ["onednn_transpose_op_test.cc"],
+    linkstatic = 1,
+    deps = [
+        ":mkl_transpose_op",
+        "//tensorflow/core:direct_session",
     ] + MKL_TEST_DEPS,
 )
