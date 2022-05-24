@@ -112,7 +112,8 @@ namespace tensorflow {
 
 template <typename Device, typename Tinput, typename Tweight, typename Tbias,
           typename Toutput, bool native_format = false>
-class MklDnnQuantizedMatMulOp : public MklDnnMatMulOpBase<Tweight, Toutput> {
+class MklDnnQuantizedMatMulOp
+    : public MklDnnMatMulOpBase<Tweight, Tbias, Toutput> {
  public:
   virtual ~MklDnnQuantizedMatMulOp() {
     if (this->input_bias_ != nullptr) {
@@ -137,7 +138,7 @@ class MklDnnQuantizedMatMulOp : public MklDnnMatMulOpBase<Tweight, Toutput> {
   }
 
   explicit MklDnnQuantizedMatMulOp(OpKernelConstruction* context)
-      : MklDnnMatMulOpBase<Tweight, Toutput>(context) {
+      : MklDnnMatMulOpBase<Tweight, Tbias, Toutput>(context) {
     string mode_string;
     OP_REQUIRES_OK(context, context->GetAttr("input_quant_mode", &mode_string));
     if (mode_string == "MIN_FIRST") {
@@ -533,7 +534,7 @@ class MklDnnQuantizedMatMulReluOp
     MklDnnQuantizedMatMulOp<Device, quint8, qint8, Tbias, Toutput,
                             native_format>::ExtendMklDnnMatMulFwdParams(context,
                                                                         params);
-    params.post_op_params.push_back({"relu", {1.0, 0.0, 0.0}});
+    params.post_op_params.push_back({"Relu", {1.0, 0.0, 0.0}});
   }
 };
 

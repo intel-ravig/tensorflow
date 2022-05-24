@@ -21,12 +21,13 @@ limitations under the License.
 #include <string>
 #include <vector>
 
-#include "third_party/eigen3/unsupported/Eigen/CXX11/Tensor"
 #include "dnnl.hpp"
 #include "tensorflow/core/framework/op.h"
 #include "tensorflow/core/framework/op_kernel.h"
+#include "tensorflow/core/framework/tensor_util.h"
 #include "tensorflow/core/util/mkl_util.h"
 #include "tensorflow/core/util/onednn_env_vars.h"
+#include "third_party/eigen3/unsupported/Eigen/CXX11/Tensor"
 #ifdef DNNL_AARCH64_USE_ACL
 #include "tensorflow/core/platform/hash.h"
 #include "tensorflow/core/platform/mutex.h"
@@ -72,6 +73,7 @@ struct MklDnnMatMulFwdParams {
   struct PostOpParam {
     string name;
     std::vector<float> param;
+    string partial_key = string("");
   };
   std::vector<PostOpParam> post_op_params;
 
@@ -239,14 +241,14 @@ class MklDnnMatMulFwdPrimitive : public MklPrimitive {
     dnnl::post_ops post_ops;
     if (!post_op_params.empty()) {
       for (auto const& post_op_param : post_op_params) {
-        if (post_op_param.name == "relu" || post_op_param.name == "leakyrelu") {
+        if (post_op_param.name == "Relu" || post_op_param.name == "LeakyRelu") {
           DCHECK_EQ(post_op_param.param.size(), 3);
           float op_scale = post_op_param.param[0];
           float op_alpha = post_op_param.param[1];
           float op_beta = post_op_param.param[2];
           post_ops.append_eltwise(op_scale, dnnl::algorithm::eltwise_relu,
                                   op_alpha, op_beta);
-        } else if (post_op_param.name == "relu6") {
+        } else if (post_op_param.name == "Relu6") {
           DCHECK_EQ(post_op_param.param.size(), 3);
           float op_scale = post_op_param.param[0];
           float op_alpha = post_op_param.param[1];
@@ -254,35 +256,35 @@ class MklDnnMatMulFwdPrimitive : public MklPrimitive {
           post_ops.append_eltwise(op_scale,
                                   dnnl::algorithm::eltwise_bounded_relu,
                                   op_alpha, op_beta);
-        } else if (post_op_param.name == "elu") {
+        } else if (post_op_param.name == "Elu") {
           DCHECK_EQ(post_op_param.param.size(), 3);
           float op_scale = post_op_param.param[0];
           float op_alpha = post_op_param.param[1];
           float op_beta = post_op_param.param[2];
           post_ops.append_eltwise(op_scale, dnnl::algorithm::eltwise_elu,
                                   op_alpha, op_beta);
-        } else if (post_op_param.name == "gelu_approximate") {
+        } else if (post_op_param.name == "GeluApproximate") {
           DCHECK_EQ(post_op_param.param.size(), 3);
           float op_scale = post_op_param.param[0];
           float op_alpha = post_op_param.param[1];
           float op_beta = post_op_param.param[2];
           post_ops.append_eltwise(op_scale, dnnl::algorithm::eltwise_gelu_tanh,
                                   op_alpha, op_beta);
-        } else if (post_op_param.name == "gelu_exact") {
+        } else if (post_op_param.name == "GeluExact") {
           DCHECK_EQ(post_op_param.param.size(), 3);
           float op_scale = post_op_param.param[0];
           float op_alpha = post_op_param.param[1];
           float op_beta = post_op_param.param[2];
           post_ops.append_eltwise(op_scale, dnnl::algorithm::eltwise_gelu_erf,
                                   op_alpha, op_beta);
-        } else if (post_op_param.name == "tanh") {
+        } else if (post_op_param.name == "Tanh") {
           DCHECK_EQ(post_op_param.param.size(), 3);
           float op_scale = post_op_param.param[0];
           float op_alpha = post_op_param.param[1];
           float op_beta = post_op_param.param[2];
           post_ops.append_eltwise(op_scale, dnnl::algorithm::eltwise_tanh,
                                   op_alpha, op_beta);
-        } else if (post_op_param.name == "logistic") {
+        } else if (post_op_param.name == "Sigmoid") {
           DCHECK_EQ(post_op_param.param.size(), 3);
           float op_scale = post_op_param.param[0];
           float op_alpha = post_op_param.param[1];
@@ -290,23 +292,25 @@ class MklDnnMatMulFwdPrimitive : public MklPrimitive {
           post_ops.append_eltwise(op_scale, dnnl::algorithm::eltwise_logistic,
                                   op_alpha, op_beta);
         } else if (post_op_param.name == "output_scale") {
-          DCHECK_EQ(post_op_param.param.size(), 1);
-          std::vector<float> scales;
-          scales.push_back(post_op_param.param[0]);
-          post_ops_attr.set_output_scales(0, scales);
+          if (post_op_param.param.size() == 1)
+            post_ops_attr.set_output_scales(0, post_op_param.param);
+          else
+            post_ops_attr.set_output_scales(2, post_op_param.param);
         } else if (post_op_param.name == "sum") {
           DCHECK_EQ(post_op_param.param.size(), 1);
           float op_scale = post_op_param.param[0];
           post_ops.append_sum(op_scale);
 
         } else {
-          DCHECK((post_op_param.name == "relu") ||
-                 (post_op_param.name == "relu6") ||
-                 (post_op_param.name == "elu") ||
-                 (post_op_param.name == "tanh") ||
-                 (post_op_param.name == "logistic") ||
+          DCHECK((post_op_param.name == "Relu") ||
+                 (post_op_param.name == "Relu6") ||
+                 (post_op_param.name == "Elu") ||
+                 (post_op_param.name == "GeluApproximate") ||
+                 (post_op_param.name == "GeluExact") ||
+                 (post_op_param.name == "Tanh") ||
+                 (post_op_param.name == "Sigmoid") ||
                  (post_op_param.name == "sum") ||
-                 (post_op_param.name == "leakyrelu") ||
+                 (post_op_param.name == "LeakyRelu") ||
                  (post_op_param.name == "output_scale"));
         }
       }
@@ -411,12 +415,12 @@ class MklDnnMatMulFwdPrimitiveFactory : public MklPrimitiveFactory<T> {
 
     // Generate keys for post-ops
     for (auto const& post_op_param : mkldnn_matmul_fwd_dims.post_op_params) {
-      if (post_op_param.name == "relu" || post_op_param.name == "relu6" ||
-          post_op_param.name == "elu" || post_op_param.name == "tanh" ||
-          post_op_param.name == "logistic" ||
-          post_op_param.name == "leakyrelu" ||
-          post_op_param.name == "gelu_approximate" ||
-          post_op_param.name == "gelu_exact") {
+      if (post_op_param.name == "Relu" || post_op_param.name == "Relu6" ||
+          post_op_param.name == "Elu" || post_op_param.name == "Tanh" ||
+          post_op_param.name == "Sigmoid" ||
+          post_op_param.name == "LeakyRelu" ||
+          post_op_param.name == "GeluApproximate" ||
+          post_op_param.name == "GeluExact") {
         DCHECK_EQ(post_op_param.param.size(), 3);
         key_creator.AddAsKey(post_op_param.name);
         key_creator.AddAsKey(post_op_param.param[0]);
@@ -427,9 +431,16 @@ class MklDnnMatMulFwdPrimitiveFactory : public MklPrimitiveFactory<T> {
         key_creator.AddAsKey(post_op_param.name);
         key_creator.AddAsKey(post_op_param.param[0]);
       } else if (post_op_param.name == "output_scale") {
-        DCHECK_EQ(post_op_param.param.size(), 1);
         key_creator.AddAsKey(post_op_param.name);
-        key_creator.AddAsKey(post_op_param.param[0]);
+        if (post_op_param.partial_key.empty()) {
+          DCHECK_EQ(post_op_param.param.size(), 1);
+          // Old Quantized MatMul kernels do not create part of key beforehand
+          // as primitive caching-key-creation optimization.
+          key_creator.AddAsKey(post_op_param.param[0]);
+        } else {
+          // New Quantized MatMul kernels pre-create partial key.
+          key_creator.AddAsKey(post_op_param.partial_key);
+        }
       } else {
         return string("not_a_key");
       }
@@ -450,7 +461,7 @@ class MklDnnMatMulFwdPrimitiveFactory : public MklPrimitiveFactory<T> {
   }
 };
 
-template <class Tweight, class Toutput>
+template <class Tweight, class Tbias, class Toutput>
 class MklDnnMatMulOpBase : public OpKernel {
  public:
   explicit MklDnnMatMulOpBase(OpKernelConstruction* context)
@@ -562,6 +573,34 @@ class MklDnnMatMulOpBase : public OpKernel {
 
   engine cpu_engine_ = engine(engine::kind::cpu, 0);
 
+  bool IsBiasCacheEmpty() TF_LOCKS_EXCLUDED(bias_cache_mutex_) {
+    tf_shared_lock lock(bias_cache_mutex_);
+    return (cached_bias_data_pt_.NumElements() == 0);
+  }
+
+  virtual bool IsCachedBiasValid(float, float)
+      TF_LOCKS_EXCLUDED(bias_cache_mutex_) {
+    tf_shared_lock lock(bias_cache_mutex_);
+    return false;
+  }
+
+  void CacheBias(OpKernelContext* ctx, const Tensor& temp_scaled_bias_tensor) {
+    mutex_lock lock(bias_cache_mutex_);
+    if (cached_bias_data_pt_.NumElements() > 0) {
+      return;
+    }
+    OP_REQUIRES_OK(ctx, ctx->allocate_temp(temp_scaled_bias_tensor.dtype(),
+                                           temp_scaled_bias_tensor.shape(),
+                                           &cached_bias_data_pt_));
+    tensor::DeepCopy(temp_scaled_bias_tensor, &cached_bias_data_pt_);
+  }
+
+  void GetCachedBias(Tbias** bias_data) TF_LOCKS_EXCLUDED(bias_cache_mutex_) {
+    tf_shared_lock lock(bias_cache_mutex_);
+    const Tensor& cached_bias_data = cached_bias_data_pt_;
+    *bias_data = const_cast<Tbias*>(cached_bias_data.flat<Tbias>().data());
+  }
+
  protected:
   // Tensor to save reordered weight
   mutex mu_;
@@ -569,6 +608,11 @@ class MklDnnMatMulOpBase : public OpKernel {
   Tensor weight_oi_md_ TF_GUARDED_BY(mu_);
 
   bool is_weight_const_;
+
+  bool is_bias_const_;
+  mutex bias_cache_mutex_;
+  // Persistent tensor for cached bias.
+  Tensor cached_bias_data_pt_ TF_GUARDED_BY(bias_cache_mutex_);
 
   const int kInputIndexSrc = 0;
   const int kInputIndexWeight = 1;
