@@ -108,12 +108,8 @@ which python
 python --version
 
 
-# install required pip packages and additional ones as needed.
-# TODO (This should be automatically installed by this script
-# https://github.com/tensorflow/tensorflow/blob/master/tensorflow/tools/ci_build/install/install_pip_packages_by_version.sh
-python -m pip install absl-py astunparse flatbuffers google_pasta h5py keras-nightly keras_preprocessing numpy opt_einsum \
-  protobuf scipy six termcolor typing_extensions wheel wrapt gast==0.4.0 tensorboard tf-estimator-nightly packaging \
-  portpicker ${PIP_MODULES}
+# Install pip modules as per specs in tensorflow/tools/ci_build/release/requirements_common.txt
+python -m pip install -r $MYTFWS/tensorflow/tools/ci_build/release/requirements_common.txt
 
 # set up other Variables required by bazel.
 export PYTHON_BIN_PATH="${PYTHON_DIRECTORY}"/Scripts/python.exe
