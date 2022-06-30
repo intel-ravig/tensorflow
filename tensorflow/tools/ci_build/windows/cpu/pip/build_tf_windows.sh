@@ -58,7 +58,7 @@ PY_TEST_DIR="py_test_dir"
 
 SKIP_TEST=0
 RELEASE_BUILD=0
-TEST_TARGET="//${PY_TEST_DIR}/tensorflow/python/..."
+TEST_TARGET="//${PY_TEST_DIR}/tensorflow/...  -//${PY_TEST_DIR}/tensorflow/java/...  -//${PY_TEST_DIR}/tensorflow/lite/...  -//${PY_TEST_DIR}/tensorflow/compiler/xla/python/tpu_driver/...  -//${PY_TEST_DIR}/tensorflow/compiler/..."
 PROJECT_NAME=""
 EXTRA_BUILD_FLAGS=""
 EXTRA_TEST_FLAGS=""
@@ -137,11 +137,14 @@ fi
 run_configure_for_cpu_build
 
 bazel build ${EXTRA_BUILD_FLAGS}  \
+  --experimental_cc_shared_library \
   --build_tag_filters=-no_pip,-no_windows,-no_oss,-gpu,-tpu \
   --output_filter=^$ \
   tensorflow/lite:framework tensorflow/lite/examples/minimal:minimal || exit $?
 
-bazel build --config=release_cpu_windows ${EXTRA_BUILD_FLAGS} \
+bazel build \
+  --experimental_cc_shared_library \
+  --config=release_cpu_windows ${EXTRA_BUILD_FLAGS} \
   --output_filter=^$ \
   tensorflow/tools/pip_package:build_pip_package || exit $?
 
@@ -167,13 +170,19 @@ N_JOBS="${NUMBER_OF_PROCESSORS}"
 
 # Define no_tensorflow_py_deps=true so that every py_test has no deps anymore,
 # which will result testing system installed tensorflow
-bazel test --announce_rc --config=opt -k --test_output=errors \
+bazel test --announce_rc --config=opt --test_output=errors \
+  --nodistinct_host_configuration  --dynamic_mode=off \
+  --experimental_cc_shared_library \
+  --config=xla  --config=short_logs \
+  --copt=/d2ReducedOptimizeHugeFunctions --host_copt=/d2ReducedOptimizeHugeFunctions \
   ${EXTRA_TEST_FLAGS} \
-  --define=no_tensorflow_py_deps=true --test_lang_filters=py \
-  --test_tag_filters=-no_pip,-no_windows,-no_oss,-gpu,-tpu,-v1only \
-  --build_tag_filters=-no_pip,-no_windows,-no_oss,-gpu,-tpu --build_tests_only \
+  --define=no_tensorflow_py_deps=true \
+  --test_tag_filters=-no_windows,-no_oss,-gpu,-tpu,-v1only \
+  --build_tag_filters=-no_windows,-no_oss,-gpu,-tpu  --build_tests_only \
+  --config=monolithic --keep_going \
   --test_size_filters=small,medium \
   --jobs="${N_JOBS}" --test_timeout="300,450,1200,3600" \
   --flaky_test_attempts=3 \
   --output_filter=^$ \
-  ${TEST_TARGET}
+  --verbose_failures \
+  --  ${TEST_TARGET}
