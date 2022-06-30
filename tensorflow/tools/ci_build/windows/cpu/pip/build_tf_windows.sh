@@ -58,7 +58,7 @@ PY_TEST_DIR="py_test_dir"
 
 SKIP_TEST=0
 RELEASE_BUILD=0
-TEST_TARGET="//${PY_TEST_DIR}/tensorflow/...  -//${PY_TEST_DIR}/tensorflow/java/...  -//${PY_TEST_DIR}/tensorflow/lite/...  -//${PY_TEST_DIR}/tensorflow/compiler/xla/python/tpu_driver/...  -//${PY_TEST_DIR}/tensorflow/compiler/..."
+TEST_TARGET="//tensorflow/...  -//tensorflow/java/...  -//tensorflow/lite/...  -//tensorflow/compiler/xla/python/tpu_driver/...  -//tensorflow/compiler/..."
 PROJECT_NAME=""
 EXTRA_BUILD_FLAGS=""
 EXTRA_TEST_FLAGS=""
