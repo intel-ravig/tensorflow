@@ -17,7 +17,7 @@ set -x
 #set -e
 
 script_dir=$(dirname $0)
-script_dir_path=$(cd $(dirname “${BASH_SOURCE:-$0}”) && pwd)
+script_dir_path=$(cd $(dirname "${BASH_SOURCE:-$0}") && pwd)
 
 POSITIONAL_ARGS=()
 XBF_ARGS=""
