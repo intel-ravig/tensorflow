@@ -33,7 +33,7 @@ set -e
 # This script is under <repo_root>/tensorflow/tools/ci_build/windows/cpu/pip/
 # Change into repository root.
 script_dir=$(dirname $0)
-cd ${script_dir%%tensorflow/tools/ci_build/windows/cpu/pip}.
+
 
 # Setting up the environment variables Bazel and ./configure needs
 source "tensorflow/tools/ci_build/windows/bazel/common_env.sh" \
