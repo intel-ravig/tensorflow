@@ -17,6 +17,7 @@ set -x
 #set -e
 
 script_dir=$(dirname $0)
+script_dir_path=$(cd $(dirname “${BASH_SOURCE:-$0}”) && pwd)
 
 POSITIONAL_ARGS=()
 XBF_ARGS=""
@@ -135,7 +136,7 @@ set +e   # Unset so script continues even if commands fail, this is needed to co
 
 cd $MYTFWS
 
-bash "${script_dir}"/build_tf_windows.sh \
+bash "${script_dir_path}"/build_tf_windows.sh \
    --extra_build_flags "--action_env=TEMP=${TMP} --action_env=TMP=${TMP} ${XBF_ARGS}" \
    --extra_test_flags "--action_env=TEMP=${TMP} --action_env=TMP=${TMP} ${XTF_ARGS}" \
    ${POSITIONAL_ARGS[@]}  > run.log 2>&1
