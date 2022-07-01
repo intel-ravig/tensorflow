@@ -136,45 +136,45 @@ fi
 
 run_configure_for_cpu_build
 
-bazel build ${EXTRA_BUILD_FLAGS}  \
-  --experimental_cc_shared_library \
-  --build_tag_filters=-no_pip,-no_windows,-no_oss,-gpu,-tpu \
-  --output_filter=^$ \
-  tensorflow/lite:framework tensorflow/lite/examples/minimal:minimal || exit $?
+# bazel build ${EXTRA_BUILD_FLAGS}  \
+#   --experimental_cc_shared_library \
+#   --build_tag_filters=-no_pip,-no_windows,-no_oss,-gpu,-tpu \
+#   --output_filter=^$ \
+#   tensorflow/lite:framework tensorflow/lite/examples/minimal:minimal || exit $?
 
-bazel build \
-  --experimental_cc_shared_library \
-  --config=release_cpu_windows ${EXTRA_BUILD_FLAGS} \
-  --output_filter=^$ \
-  tensorflow/tools/pip_package:build_pip_package || exit $?
+# bazel build \
+#   --experimental_cc_shared_library \
+#   --config=release_cpu_windows ${EXTRA_BUILD_FLAGS} \
+#   --output_filter=^$ \
+#   tensorflow/tools/pip_package:build_pip_package || exit $?
 
-if [[ "$SKIP_TEST" == 1 ]]; then
-  exit 0
-fi
+# if [[ "$SKIP_TEST" == 1 ]]; then
+#   exit 0
+# fi
 
-# Create a python test directory to avoid package name conflict
-create_python_test_dir "${PY_TEST_DIR}"
+# # Create a python test directory to avoid package name conflict
+# create_python_test_dir "${PY_TEST_DIR}"
 
-./bazel-bin/tensorflow/tools/pip_package/build_pip_package "$PWD/${PY_TEST_DIR}" ${EXTRA_PIP_FLAGS}
+# ./bazel-bin/tensorflow/tools/pip_package/build_pip_package "$PWD/${PY_TEST_DIR}" ${EXTRA_PIP_FLAGS}
 
-if [[ "$TF_NIGHTLY" == 1 ]]; then
-  exit 0
-fi
+# if [[ "$TF_NIGHTLY" == 1 ]]; then
+#   exit 0
+# fi
 
-# Running python tests on Windows needs pip package installed
-PIP_NAME=$(ls ${PY_TEST_DIR}/tensorflow*.whl)
-reinstall_tensorflow_pip ${PIP_NAME}
+# # Running python tests on Windows needs pip package installed
+# PIP_NAME=$(ls ${PY_TEST_DIR}/tensorflow*.whl)
+# reinstall_tensorflow_pip ${PIP_NAME}
 
 # NUMBER_OF_PROCESSORS is predefined on Windows
 N_JOBS="${NUMBER_OF_PROCESSORS}"
 
 # Define no_tensorflow_py_deps=true so that every py_test has no deps anymore,
 # which will result testing system installed tensorflow
-bazel test --announce_rc --config=opt --test_output=errors \
+bazel test --announce_rc --config=opt  --copt=/d2ReducedOptimizeHugeFunctions --host_copt=/d2ReducedOptimizeHugeFunctions \
+  --test_output=errors \
   --nodistinct_host_configuration  --dynamic_mode=off \
   --experimental_cc_shared_library \
   --config=xla  --config=short_logs \
-  --copt=/d2ReducedOptimizeHugeFunctions --host_copt=/d2ReducedOptimizeHugeFunctions \
   ${EXTRA_TEST_FLAGS} \
   --define=no_tensorflow_py_deps=true \
   --test_tag_filters=-no_windows,-no_oss,-gpu,-tpu,-v1only \
