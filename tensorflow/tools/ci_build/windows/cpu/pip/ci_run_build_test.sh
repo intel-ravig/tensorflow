@@ -77,6 +77,10 @@ which git
 [[ -e "$NATIVE_PYTHON_LOCATION/Scripts/pip.exe" ]] || { echo "Specified Python path has no pip: $NATIVE_PYTHON_LOCATION"; exit 1;}
 [[ -e "$NATIVE_PYTHON_LOCATION/Lib/venv" ]] || { echo "Specified Python path has no venv: $NATIVE_PYTHON_LOCATION"; exit 1;}
 
+# clean bazel to get rid of any stale cache
+cd ${MYTFWS}
+bazel clean --expunge
+
 $NATIVE_PYTHON_LOCATION/python.exe -m pip list
 
 # =========================== Start of actual script =========================
