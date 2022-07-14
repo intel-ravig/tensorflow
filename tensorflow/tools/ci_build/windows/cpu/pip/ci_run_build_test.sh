@@ -79,7 +79,7 @@ which git
 
 # clean bazel to get rid of any stale cache
 cd ${MYTFWS}
-bazel clean --expunge --action_env=TEMP=${TEMP} --action_env=TMP=${TMP}
+bazel clean --expunge --action_env=TEMP=${TEMP} --action_env=TMP=${TMP} --output_user_root=${TMPDIR}
 
 $NATIVE_PYTHON_LOCATION/python.exe -m pip list
 
