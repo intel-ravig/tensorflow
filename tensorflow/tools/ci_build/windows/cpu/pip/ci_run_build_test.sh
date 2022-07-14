@@ -77,10 +77,6 @@ which git
 [[ -e "$NATIVE_PYTHON_LOCATION/Scripts/pip.exe" ]] || { echo "Specified Python path has no pip: $NATIVE_PYTHON_LOCATION"; exit 1;}
 [[ -e "$NATIVE_PYTHON_LOCATION/Lib/venv" ]] || { echo "Specified Python path has no venv: $NATIVE_PYTHON_LOCATION"; exit 1;}
 
-# clean bazel to get rid of any stale cache
-cd ${MYTFWS}
-bazel --output_user_root=${TMPDIR} clean --expunge --action_env=TEMP=${TEMP} --action_env=TMP=${TMP}
-
 $NATIVE_PYTHON_LOCATION/python.exe -m pip list
 
 # =========================== Start of actual script =========================
@@ -159,7 +155,20 @@ bash "${MYTFWS}"/tensorflow/tools/ci_build/windows/cpu/pip/build_tf_windows.sh \
    ${POSITIONAL_ARGS[@]}  > run.log 2>&1
 
 build_ret_val=$?   # Store the ret value
-   
+
+# Retry once more with "bazel clean" for failed builds to get rid of any stale cache
+if [[ $build_ret_val -ne 0 ]]; then
+  cd ${MYTFWS}
+  bazel --output_user_root=${TMPDIR} clean --expunge
+
+  bash "${MYTFWS}"/tensorflow/tools/ci_build/windows/cpu/pip/build_tf_windows.sh \
+     --extra_build_flags "--action_env=TEMP=${TMP} --action_env=TMP=${TMP} ${XBF_ARGS}" \
+     --extra_test_flags "--action_env=TEMP=${TMP} --action_env=TMP=${TMP} ${XTF_ARGS}" \
+     ${POSITIONAL_ARGS[@]}  > run.log 2>&1
+
+  build_ret_val=$?   # Store the ret value
+fi
+
 # process results
 cd $MYTFWS_ROOT
 
