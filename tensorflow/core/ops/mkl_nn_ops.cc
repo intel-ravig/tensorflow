@@ -1917,8 +1917,8 @@ REGISTER_OP("_QuantizedTranspose")
     .SetShapeFn([](InferenceContext* c) {
       TF_RETURN_IF_ERROR(TransposeShapeFn(c));
       ShapeHandle scalar_shape_handle;
-      TF_RETURN_IF_ERROR(c->WithRank(c->input(1), 0, &scalar_shape_handle));
       TF_RETURN_IF_ERROR(c->WithRank(c->input(2), 0, &scalar_shape_handle));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(3), 0, &scalar_shape_handle));
       c->set_output(1, scalar_shape_handle);
       c->set_output(2, scalar_shape_handle);
       return Status::OK();
@@ -1937,8 +1937,8 @@ REGISTER_OP("_MklQuantizedTranspose")
     .SetShapeFn([](InferenceContext* c) {
       TF_RETURN_IF_ERROR(TransposeShapeFn(c));
       ShapeHandle scalar_shape_handle;
-      TF_RETURN_IF_ERROR(c->WithRank(c->input(1), 0, &scalar_shape_handle));
       TF_RETURN_IF_ERROR(c->WithRank(c->input(2), 0, &scalar_shape_handle));
+      TF_RETURN_IF_ERROR(c->WithRank(c->input(3), 0, &scalar_shape_handle));
       c->set_output(1, scalar_shape_handle);
       c->set_output(2, scalar_shape_handle);
       return Status::OK();
