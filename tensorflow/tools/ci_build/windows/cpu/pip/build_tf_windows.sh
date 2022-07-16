@@ -170,19 +170,24 @@ N_JOBS="${NUMBER_OF_PROCESSORS}"
 
 # Define no_tensorflow_py_deps=true so that every py_test has no deps anymore,
 # which will result testing system installed tensorflow
-bazel test --announce_rc --config=opt  --copt=/d2ReducedOptimizeHugeFunctions --host_copt=/d2ReducedOptimizeHugeFunctions \
+bazel \
+  --output_user_root=${TMPDIR} \
+  test \
+  --nodistinct_host_configuration \
+  --dynamic_mode=off \
+  --config=xla \
+  --config=short_logs \
+  --announce_rc \
+  --build_tag_filters=-no_windows,-no_oss \
+  --build_tests_only \
+  --config=monolithic \
+  --keep_going \
   --test_output=errors \
-  --nodistinct_host_configuration  --dynamic_mode=off \
-  --experimental_cc_shared_library \
-  --config=xla  --config=short_logs \
-  ${EXTRA_TEST_FLAGS} \
-  --define=no_tensorflow_py_deps=true \
-  --test_tag_filters=-no_windows,-no_oss,-gpu,-tpu,-v1only \
-  --build_tag_filters=-no_windows,-no_oss,-gpu,-tpu  --build_tests_only \
-  --config=monolithic --keep_going \
+  --test_tag_filters=-no_windows,-no_oss,-gpu,-tpu \
   --test_size_filters=small,medium \
-  --jobs="${N_JOBS}" --test_timeout="300,450,1200,3600" \
-  --flaky_test_attempts=3 \
-  --output_filter=^$ \
+  --test_timeout="300,450,1200,3600" \
   --verbose_failures \
+  ${EXTRA_TEST_FLAGS} \
+  --copt=/d2ReducedOptimizeHugeFunctions \
+  --host_copt=/d2ReducedOptimizeHugeFunctions \
   --  ${TEST_TARGET}
