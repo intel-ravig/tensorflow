@@ -459,32 +459,28 @@ class MklQuantizeV2Op : public OpKernel {
                             dst.GetUsrMemDataHandle(), cpu_stream);
     } else if (mode_ == QUANTIZE_MODE_MIN_FIRST) {
       using namespace dnnl;
-      engine cpu_engine(engine::kind::cpu, 0);
-      std::vector<primitive> net;
-      stream s(cpu_engine);
+      std::shared_ptr<stream> cpu_stream;
+      MklDnnThreadPool eigen_tp(ctx);
+      cpu_stream.reset(CreateStream(&eigen_tp, cpu_engine));
 
-      memory src_0_mem(src_md, cpu_engine,
-                       const_cast<S*>(src_tensor.flat<S>().data()));
       auto shift = static_cast<S>(-min_range);
-      memory::dims src_1_dims(src_tf_shape.dims(), 1);
-      auto src_1_md =
-          memory::desc(src_1_dims, MklDnnType<S>(), dst_layout_type);
-      memory src_1_mem(src_1_md, cpu_engine, (void*)(&shift));
-
-      memory dst_mem(dst_md, cpu_engine, output_tensor->flat<T>().data());
+      memory::dims shift_dims(src_tf_shape.dims(), 1);
+      auto shift_md =
+          memory::desc(shift_dims, MklDnnType<S>(), dst_layout_type);
+      memory shift_mem(shift_md, cpu_engine, (void*)(&shift));
 
       primitive_attr attr;
       attr.set_scales(DNNL_ARG_SRC_0, 0, {255.0f / (max_range - min_range)});
       attr.set_scales(DNNL_ARG_SRC_1, 0, {255.0f / (max_range - min_range)});
       auto binary_d =
-          binary::desc(algorithm::binary_add, src_md, src_1_md, dst_md);
+          binary::desc(algorithm::binary_add, src_md, shift_md, dst_md);
       auto binary_pd = binary::primitive_desc(binary_d, attr, cpu_engine);
       auto binary_prim = binary(binary_pd);
-      net.push_back(binary_prim);
-      std::unordered_map<int, memory> net_args{{DNNL_ARG_SRC_0, src_0_mem},
-                                               {DNNL_ARG_SRC_1, src_1_mem},
-                                               {DNNL_ARG_DST, dst_mem}};
-      net.at(0).execute(s, net_args);
+      std::unordered_map<int, memory> net_args{
+          {DNNL_ARG_SRC_0, *src.GetUsrMem()},
+          {DNNL_ARG_SRC_1, shift_mem},
+          {DNNL_ARG_DST, *dst.GetUsrMem()}};
+      binary_prim.execute(*cpu_stream, net_args);
     } else {
       OP_REQUIRES(ctx, false,
                   errors::Unimplemented(
