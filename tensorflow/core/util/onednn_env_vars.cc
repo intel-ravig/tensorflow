@@ -32,11 +32,20 @@ bool AreWeightsFrozen() {
   return weights_const;
 }
 
+bool EnableFastConv() {
+  static bool fast_conv = false;
+  static absl::once_flag once;
+  absl::call_once(once, [&] {
+    TF_CHECK_OK(ReadBoolFromEnvVar("TF_ONEDNN_ENABLE_FAST_CONV",
+                                   /*default_value*/ false, &fast_conv));
+  });
+  return fast_conv;
+}
 bool UseSystemAlloc() {
   static bool use_sys_alloc = false;
   static absl::once_flag once;
   absl::call_once(once, [&] {
-    TF_CHECK_OK(ReadBoolFromEnvVar("TF_ONEDNN_USE_SYSTEM_ALLOCATOR",
+    TF_CHECK_OK(ReadBoolFromEnvVar("TF_USE_SYSTEM_ALLOCATOR",
                                    /*default_value*/ false, &use_sys_alloc));
   });
   return use_sys_alloc;

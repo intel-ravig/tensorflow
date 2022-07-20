@@ -146,6 +146,12 @@ bool IsCollective(const NodeDef& node) {
          node.op() == "CollectiveBcastRecv";
 }
 
+bool IsComparison(const NodeDef& node) {
+  return node.op() == "Equal" || node.op() == "NotEqual" ||
+         node.op() == "GreaterEqual" || node.op() == "Greater" ||
+         node.op() == "LessEqual" || node.op() == "Less";
+}
+
 bool IsComplex(const NodeDef& node) { return node.op() == "Complex"; }
 
 bool IsComplexAbs(const NodeDef& node) { return node.op() == "ComplexAbs"; }
@@ -297,6 +303,8 @@ bool IsFusedBatchNormGrad(const NodeDef& node) {
          op == "FusedBatchNormGradV3";
 }
 
+bool IsFusedConv2D(const NodeDef& node) { return node.op() == "_FusedConv2D"; }
+
 bool IsGather(const NodeDef& node) {
   const auto& op = node.op();
   return op == "Gather" || op == "GatherV2" || op == "ResourceGather";
@@ -389,6 +397,10 @@ bool IsMirrorPadGrad(const NodeDef& node) {
   return node.op() == "MirrorPadGrad";
 }
 
+bool IsMklFusedMish(const NodeDef& node) {
+  return node.op() == "_MklFusedMish";
+}
+
 bool IsMod(const NodeDef& node) { return node.op() == "Mod"; }
 
 bool IsMul(const NodeDef& node) { return node.op() == "Mul"; }
@@ -479,9 +491,13 @@ bool IsRelu(const NodeDef& node) { return node.op() == "Relu"; }
 
 bool IsRelu6(const NodeDef& node) { return node.op() == "Relu6"; }
 
+bool IsGelu(const NodeDef& node) { return node.op() == "Gelu"; }
+
 bool IsReluGrad(const NodeDef& node) { return node.op() == "ReluGrad"; }
 
 bool IsRelu6Grad(const NodeDef& node) { return node.op() == "Relu6Grad"; }
+
+bool IsGeluGrad(const NodeDef& node) { return node.op() == "GeluGrad"; }
 
 bool IsReshape(const NodeDef& node) { return (node.op() == "Reshape"); }
 

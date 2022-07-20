@@ -16,8 +16,8 @@ limitations under the License.
 #ifndef TENSORFLOW_CORE_KERNELS_RANDOM_OP_H_
 #define TENSORFLOW_CORE_KERNELS_RANDOM_OP_H_
 
-#include "third_party/eigen3/unsupported/Eigen/CXX11/Tensor"
 #include "tensorflow/core/lib/random/random_distributions.h"
+#include "third_party/eigen3/unsupported/Eigen/CXX11/Tensor"
 
 namespace tensorflow {
 
@@ -28,6 +28,8 @@ namespace functor {
 template <typename Device, class Distribution>
 struct FillPhiloxRandom;
 
+template <typename Device, class Distribution>
+struct FillPCGRandom;
 typedef Eigen::ThreadPoolDevice CPUDevice;
 // Declares the partially CPU-specialized functor struct.
 //
@@ -43,6 +45,13 @@ struct FillPhiloxRandom<CPUDevice, Distribution> {
   void operator()(OpKernelContext* ctx, const CPUDevice& d, const uint64* key,
                   const uint64* counter, random::PhiloxRandom gen,
                   typename Distribution::ResultElementType* data, int64_t size,
+                  Distribution dist);
+};
+template <class Distribution>
+struct FillPCGRandom<CPUDevice, Distribution> {
+  void operator()(OpKernelContext* ctx, const CPUDevice& d,
+                  random::PCGRandom gen,
+                  typename Distribution::ResultElementType* data, int64 size,
                   Distribution dist);
 };
 

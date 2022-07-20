@@ -49,11 +49,6 @@ class MklRequantizePerChannelOp : public OpKernel {
   void Compute(OpKernelContext* ctx) override {
     try {
       const Tensor& input = ctx->input(kInputTensorIndex);
-      OP_REQUIRES(
-          ctx, input.dims() == 4,
-          errors::InvalidArgument("Current RequantizePerChannel operator"
-                                  "supports 4D tensors only."));
-
       const Tensor& input_min_vec = ctx->input(kInputMinVecIndex);
       size_t depth = input_min_vec.NumElements();
       float* input_min_vec_data = (float*)const_cast<void*>(
@@ -109,15 +104,21 @@ class MklRequantizePerChannelOp : public OpKernel {
       reorder_attr.set_output_scales(2, scales);
 
       memory::dims dims_mkl_order =
-          TFShapeToMklDnnDimsInNCHW(input.shape(), FORMAT_NHWC);
-      memory::desc input_md = memory::desc(dims_mkl_order, MklDnnType<qint32>(),
-                                           memory::format_tag::nhwc);
+          input.dims() == 4
+              ? TFShapeToMklDnnDimsInNCHW(input.shape(), FORMAT_NHWC)
+              : TFShapeToMklDnnDimsInNCDHW(input.shape(), FORMAT_NHWC);
+      memory::desc input_md =
+          memory::desc(dims_mkl_order, MklDnnType<qint32>(),
+                       input.dims() == 4 ? memory::format_tag::nhwc
+                                         : memory::format_tag::ndhwc);
       memory::desc output_md =
           (out_type_ == DT_QINT8)
               ? memory::desc(dims_mkl_order, MklDnnType<qint8>(),
-                             memory::format_tag::nhwc)
+                             input.dims() == 4 ? memory::format_tag::nhwc
+                                               : memory::format_tag::ndhwc)
               : memory::desc(dims_mkl_order, MklDnnType<quint8>(),
-                             memory::format_tag::nhwc);
+                             input.dims() == 4 ? memory::format_tag::nhwc
+                                               : memory::format_tag::ndhwc);
 
       void* input_buf =
           static_cast<void*>(const_cast<qint32*>(input.flat<qint32>().data()));

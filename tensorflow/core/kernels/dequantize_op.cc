@@ -71,11 +71,12 @@ class DequantizeOp : public OpKernel {
                                           " 'MIN_FIRST', or 'SCALED', is '" +
                                           mode_string + "'"));
     } else {
-      OP_REQUIRES(
-          ctx, (mode_string == "MIN_COMBINED"),
-          errors::InvalidArgument("When output type is bfloat16, Mode"
-                                  " string must be 'MIN_COMBINED', is '" +
-                                  mode_string + "'"));
+      OP_REQUIRES(ctx,
+                  (mode_string == "MIN_COMBINED" || mode_string == "SCALED"),
+                  errors::InvalidArgument(
+                      "When output type is bfloat16, Mode"
+                      " string must be 'MIN_COMBINED', or 'SCALED', is '" +
+                      mode_string + "'"));
     }
 
     if (mode_string == "MIN_COMBINED") {

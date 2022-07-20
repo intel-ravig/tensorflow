@@ -371,6 +371,10 @@ class AutoMixedPrecisionListsMkl : public AutoMixedPrecisionLists {
                                      "DepthwiseConv2dNative",
                                      "DepthwiseConv2dNativeBackpropFilter",
                                      "DepthwiseConv2dNativeBackpropInput",
+                                     "GRUBlockCell",
+                                     "AUGRUBlockCell",
+                                     "MklGRU",
+                                     "MklAUGRU",
                                      "MatMul",
                                      "BatchMatMul",
                                      "BatchMatMulV2"};
@@ -393,6 +397,7 @@ class AutoMixedPrecisionListsMkl : public AutoMixedPrecisionLists {
                                      "BiasAdd",
                                      "BiasAddGrad",
                                      "BiasAddV1",
+                                     "Erf",
                                      "FusedBatchNormV2",
                                      "FusedBatchNormGradV2",
                                      "FusedBatchNormV3",

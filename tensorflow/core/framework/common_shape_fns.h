@@ -279,6 +279,15 @@ Status SparseReduceShapeFn(InferenceContext* c);
 // Shape function for QuantizedConv2D op.
 Status QuantizedConv2DShape(InferenceContext* c);
 
+// Shape function for _QuantizedConv2D op/fusion.
+Status FusedQuantizedConv2DShape(InferenceContext* c);
+
+// Shape function for _QuantizedDepthwiseConv2D op/fusion.
+Status FusedQuantizedDepthwiseConv2D(InferenceContext* c);
+
+// Shape function for _QuantizedConv3D op/fusion.
+Status FusedQuantizedConv3DShape(InferenceContext* c);
+
 // Shape function for QuantizedAvgPool op
 Status QuantizedAvgPoolShape(InferenceContext* c);
 

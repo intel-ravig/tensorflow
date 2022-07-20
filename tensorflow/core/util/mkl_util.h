@@ -127,7 +127,7 @@ enum class MklQuantization {
   FP_VERSION,
 };
 
-static const int kSmallBatchSize = 32;
+static const int kSmallBatchSize = 128;
 
 inline void execute_primitives(
     std::vector<dnnl::primitive>& primitives, std::shared_ptr<stream> stream,

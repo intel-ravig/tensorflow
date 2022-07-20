@@ -35,7 +35,7 @@ namespace tensorflow {
 
 typedef Eigen::ThreadPoolDevice CPUDevice;
 
-template <typename Device, typename T, bool native_format = false>
+template <typename Device, typename T, typename U, bool native_format = false>
 class MklDequantizeOp : public OpKernel {
  public:
   explicit MklDequantizeOp(OpKernelConstruction* ctx) : OpKernel(ctx) {
@@ -45,6 +45,12 @@ class MklDequantizeOp : public OpKernel {
                 errors::InvalidArgument(
                     "MklDequantizeOp only supports 'SCALED' mode, but got '" +
                     mode_string + "'"));
+    OP_REQUIRES(
+        ctx,
+        (ctx->output_type(0) == DT_FLOAT || ctx->output_type(0) == DT_BFLOAT16),
+        errors::InvalidArgument("Output type must be float or bfloat16,"
+                                " is '" +
+                                DataTypeString(ctx->output_type(0)) + "'"));
   }
 
   void Compute(OpKernelContext* ctx) override {
@@ -72,7 +78,7 @@ class MklDequantizeOp : public OpKernel {
 
       // Create reorder memory for src and dst
       MklDnnData<T> src(&cpu_engine);
-      MklDnnData<float> dst(&cpu_engine);
+      MklDnnData<U> dst(&cpu_engine);
 
       std::shared_ptr<stream> reorder_stream;
       MklDnnThreadPool eigen_tp(ctx);
@@ -82,12 +88,14 @@ class MklDequantizeOp : public OpKernel {
       // construct input TF layout. For TF layout, although input shape
       // (src_dims) required is in MKL-DNN order, the layout is Tensorflow's
       // layout
-      auto src_md =
-          src_mkl_shape.IsMklTensor()
-              ? src_mkl_shape.GetMklLayout()
-              : memory::desc(src_dims, MklDnnType<T>(),
-                             src_dims.size() == 4 ? memory::format_tag::nhwc
-                                                  : memory::format_tag::nc);
+      auto src_md = src_mkl_shape.IsMklTensor()
+                        ? src_mkl_shape.GetMklLayout()
+                        : memory::desc(src_dims, MklDnnType<T>(),
+                                       src_dims.size() == 4
+                                           ? memory::format_tag::nhwc
+                                           : src_dims.size() == 5
+                                                 ? memory::format_tag::ndhwc
+                                                 : memory::format_tag::nc);
 
       src.SetUsrMem(src_md, &src_tensor);
       src.SetUsrMemDataHandle(&src_tensor, reorder_stream);
@@ -100,27 +108,19 @@ class MklDequantizeOp : public OpKernel {
         dst_md = memory::desc(src_mkl_shape.GetMklLayout().data);
         // There is no API in MKL-DNN v1.x to construct memory descriptor with
         // same .data field but different type.
-        dst_md.data.data_type = memory::convert_to_c(MklDnnType<float>());
+        dst_md.data.data_type = memory::convert_to_c(MklDnnType<U>());
       } else {
-        dst_md = memory::desc(src_dims, MklDnnType<float>(),
-                              src_dims.size() == 4 ? memory::format_tag::nhwc
-                                                   : memory::format_tag::nc);
+        dst_md =
+            memory::desc(src_dims, MklDnnType<U>(),
+                         src_dims.size() == 4
+                             ? memory::format_tag::nhwc
+                             : src_dims.size() == 5 ? memory::format_tag::ndhwc
+                                                    : memory::format_tag::nc);
       }
 
-      // If input is MKL shape, output is also MKL shape.
       // If input is TF shape, output is also TF shape.
-      if (src_mkl_shape.IsMklTensor()) {
-        output_mkl_shape.SetMklTensor(true);
-        output_mkl_shape.SetMklLayout(&dst_md);
-        output_mkl_shape.SetElemType(MklDnnType<float>());
-        output_mkl_shape.SetTfLayout(src_mkl_shape.GetDimension(),
-                                     src_mkl_shape.GetSizesAsMklDnnDims(),
-                                     src_mkl_shape.GetTfDataFormat());
-        output_tf_shape.AddDim(dst_md.get_size() / sizeof(float));
-      } else {
-        output_mkl_shape.SetMklTensor(false);
-        output_tf_shape = MklDnnDimsToTFShape(output_dims);
-      }
+      output_mkl_shape.SetMklTensor(false);
+      output_tf_shape = MklDnnDimsToTFShape(output_dims);
 
       // Allocate MKL or TF output shape based on the above
       AllocateOutputSetMklShape(ctx, 0, &output_tensor, output_tf_shape,
@@ -144,25 +144,23 @@ class MklDequantizeOp : public OpKernel {
       const float target_range =
           static_cast<float>((uint64_t{1} << target_bits) - 1);
       const float scale_factor = max_abs / target_range;
-      std::vector<float> scales;
-      scales.push_back(scale_factor);
+      std::vector<float> scales = {scale_factor};
       primitive_attr attr;
       attr.set_output_scales(0, scales);
-      std::vector<primitive> net;
 
       // Create reorder primitive and then execute.
       auto reorder_pd =
           ReorderPd(cpu_engine, src.GetUsrMem()->get_desc(), cpu_engine,
                     dst.GetUsrMem()->get_desc(), attr);
-      net.push_back(reorder(reorder_pd));
+      std::vector<primitive> net = {reorder(reorder_pd)};
       std::vector<std::unordered_map<int, memory>> reorder_net_args;
       reorder_net_args.push_back(
           {{DNNL_ARG_FROM, *src.GetUsrMem()}, {DNNL_ARG_TO, *dst.GetUsrMem()}});
       execute_primitives(net, reorder_stream, reorder_net_args);
     } catch (dnnl::error& e) {
-      string error_msg = "Status: " + std::to_string(e.status) +
-                         ", message: " + string(e.message) + ", in file " +
-                         string(__FILE__) + ":" + std::to_string(__LINE__);
+      string error_msg = "Status: " + std::to_string(e.status) + ", message: " +
+                         string(e.message) + ", in file " + string(__FILE__) +
+                         ":" + std::to_string(__LINE__);
       OP_REQUIRES_OK(
           ctx, errors::Aborted("Operation received an exception:", error_msg));
     }
@@ -177,13 +175,27 @@ class MklDequantizeOp : public OpKernel {
 REGISTER_KERNEL_BUILDER(Name("_MklDequantize")
                             .Device(DEVICE_CPU)
                             .TypeConstraint<quint8>("T")
+                            .TypeConstraint<float>("dtype")
                             .Label(mkl_op_registry::kMklQuantizedOpLabel),
-                        MklDequantizeOp<CPUDevice, quint8, true>);
+                        MklDequantizeOp<CPUDevice, quint8, float, true>);
 REGISTER_KERNEL_BUILDER(Name("_MklDequantize")
                             .Device(DEVICE_CPU)
                             .TypeConstraint<qint8>("T")
+                            .TypeConstraint<float>("dtype")
                             .Label(mkl_op_registry::kMklQuantizedOpLabel),
-                        MklDequantizeOp<CPUDevice, qint8, true>);
+                        MklDequantizeOp<CPUDevice, qint8, float, true>);
+REGISTER_KERNEL_BUILDER(Name("_MklDequantize")
+                            .Device(DEVICE_CPU)
+                            .TypeConstraint<quint8>("T")
+                            .TypeConstraint<bfloat16>("dtype")
+                            .Label(mkl_op_registry::kMklQuantizedOpLabel),
+                        MklDequantizeOp<CPUDevice, quint8, bfloat16, true>);
+REGISTER_KERNEL_BUILDER(Name("_MklDequantize")
+                            .Device(DEVICE_CPU)
+                            .TypeConstraint<qint8>("T")
+                            .TypeConstraint<bfloat16>("dtype")
+                            .Label(mkl_op_registry::kMklQuantizedOpLabel),
+                        MklDequantizeOp<CPUDevice, qint8, bfloat16, true>);
 
 }  // namespace tensorflow
 
