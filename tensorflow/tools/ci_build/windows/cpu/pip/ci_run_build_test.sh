@@ -131,22 +131,6 @@ mkdir -p ${MYTFWS_ARTIFACT}
 
 set +e   # Unset so script continues even if commands fail, this is needed to correctly process the logs
 
-# Temp workaround to skip some failing tests
-if [[ "$SKIP_TESTS" = "" ]] ; then
-  # If SKIP_TESTS is not already set then set it to the ones that need to be skipped.
-  export SKIP_TESTS=" -//py_test_dir/tensorflow/python/kernel_tests/summary_ops:summary_ops_test_cpu -//py_test_dir/tensorflow/python/kernel_tests/signal:window_ops_test_cpu"
-fi
-
-fgrep SKIP_TESTS ${MYTFWS}/tensorflow/tools/ci_build/windows/cpu/pip/build_tf_windows.sh
-
-#if build_tf_windows.sh has aleardy been pached to skip tests, then do nothing, otherwise patch it.
-if [[ $? -eq 1 ]] ; then
-  sed 's/^TEST_TARGET=\(.*\)/TEST_TARGET="-- "\1" $SKIP_TESTS"/' ${MYTFWS}/tensorflow/tools/ci_build/windows/cpu/pip/build_tf_windows.sh > /tmp/tmp.$$
-  cp ${MYTFWS}/tensorflow/tools/ci_build/windows/cpu/pip/build_tf_windows.sh ${MYTFWS}/tensorflow/tools/ci_build/windows/cpu/pip/build_tf_windows.sh.saved
-  mv /tmp/tmp.$$ ${MYTFWS}/tensorflow/tools/ci_build/windows/cpu/pip/build_tf_windows.sh
-fi
-# end of work around
-
 cd $MYTFWS
 
 bash "${MYTFWS}"/tensorflow/tools/ci_build/windows/cpu/pip/build_tf_windows.sh \
@@ -171,12 +155,6 @@ fi
 
 # process results
 cd $MYTFWS_ROOT
-
-# copy back build_tf_windows.sh (workaround)
-if [[ -f "${MYTFWS}"/tensorflow/tools/ci_build/windows/cpu/pip/build_tf_windows.sh.saved  ]]; then
-  mv ${MYTFWS}/tensorflow/tools/ci_build/windows/cpu/pip/build_tf_windows.sh.saved ${MYTFWS}/tensorflow/tools/ci_build/windows/cpu/pip/build_tf_windows.sh
-fi
-# end workaround
 
 # Check to make sure log was created.
 [ ! -f "${MYTFWS}"/run.log  ] && exit 1
