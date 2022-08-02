@@ -160,7 +160,7 @@ cd $MYTFWS_ROOT
 [ ! -f "${MYTFWS}"/run.log  ] && exit 1
 
 # Handle the case when only whl are built
-if [[ "$TF_NIGHTLY" = 1 ]]; then
+if [[ "$TF_NIGHTLY" = 1 ]] || [[ "$RELEASE_BUILD" = 1 ]]; then
   if [[ $build_ret_val -eq 0 ]]; then
     cp ${MYTFWS}/py_test_dir/*.whl ${MYTFWS_ARTIFACT}
   else
