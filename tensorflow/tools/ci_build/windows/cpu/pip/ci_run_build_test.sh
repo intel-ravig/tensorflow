@@ -163,6 +163,7 @@ cd $MYTFWS_ROOT
 if [[ "$TF_NIGHTLY" = 1 ]] || [[ "$RELEASE_BUILD" = 1 ]]; then
   if [[ $build_ret_val -eq 0 ]]; then
     cp ${MYTFWS}/py_test_dir/*.whl ${MYTFWS_ARTIFACT}
+    cp "${MYTFWS}"/run.log ${MYTFWS_ARTIFACT}/test_run_${PYTHON_VERSION}.log
   else
     # build failed just copy the log, mark log with py version.
     cp "${MYTFWS}"/run.log ${MYTFWS_ARTIFACT}/test_run_${PYTHON_VERSION}.log
