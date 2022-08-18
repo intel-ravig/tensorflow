@@ -135,11 +135,6 @@ cd $MYTFWS
 # All commands shall pass
 set -e
 
-# This script is under <repo_root>/tensorflow/tools/ci_build/windows/cpu/bazel
-# Change into repository root.
-script_dir=$(dirname $0)
-cd ${script_dir%%tensorflow/tools/ci_build/windows/cpu/bazel}.
-
 # Setting up the environment variables Bazel and ./configure needs
 source "tensorflow/tools/ci_build/windows/bazel/common_env.sh" \
   || { echo "Failed to source common_env.sh" >&2; exit 1; }
@@ -147,6 +142,24 @@ source "tensorflow/tools/ci_build/windows/bazel/common_env.sh" \
 # load bazel_test_lib.sh
 source "tensorflow/tools/ci_build/windows/bazel/bazel_test_lib.sh" \
   || { echo "Failed to source bazel_test_lib.sh" >&2; exit 1; }
+
+# Recreate an empty bazelrc file under source root
+export TMP_BAZELRC=.tmp.bazelrc
+rm -f "${TMP_BAZELRC}"
+touch "${TMP_BAZELRC}"
+
+function cleanup {
+  # Remove all options in .tmp.bazelrc
+  echo "" > "${TMP_BAZELRC}"
+}
+trap cleanup EXIT
+
+# Enable short object file path to avoid long path issue on Windows.
+echo "startup --output_user_root=${TMPDIR}" >> "${TMP_BAZELRC}"
+
+if ! grep -q "import %workspace%/${TMP_BAZELRC}" .bazelrc; then
+  echo "import %workspace%/${TMP_BAZELRC}" >> .bazelrc
+fi
 
 run_configure_for_cpu_build
 
