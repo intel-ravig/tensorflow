@@ -3330,7 +3330,7 @@ tf_module {
   }
   member_method {
     name: "RandomIndexShuffle"
-    argspec: "args=[\'index\', \'seed\', \'max_index\', \'name\'], varargs=None, keywords=None, defaults=[\'None\'], "
+    argspec: "args=[\'index\', \'seed\', \'max_index\', \'rounds\', \'name\'], varargs=None, keywords=None, defaults=[\'4\', \'None\'], "
   }
   member_method {
     name: "RandomPoisson"
@@ -5299,6 +5299,10 @@ tf_module {
   member_method {
     name: "UniformQuantize"
     argspec: "args=[\'input\', \'scales\', \'zero_points\', \'Tout\', \'quantization_min_val\', \'quantization_max_val\', \'quantization_axis\', \'name\'], varargs=None, keywords=None, defaults=[\'-1\', \'None\'], "
+  }
+  member_method {
+    name: "UniformQuantizedClipByValue"
+    argspec: "args=[\'operand\', \'min\', \'max\', \'scales\', \'zero_points\', \'quantization_min_val\', \'quantization_max_val\', \'quantization_axis\', \'name\'], varargs=None, keywords=None, defaults=[\'-1\', \'None\'], "
   }
   member_method {
     name: "UniformQuantizedDotHybrid"

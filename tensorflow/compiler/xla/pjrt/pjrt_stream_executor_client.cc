@@ -107,24 +107,24 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/transfer_manager.h"
 #include "tensorflow/compiler/xla/shape.h"
 #include "tensorflow/compiler/xla/shape_util.h"
+#include "tensorflow/compiler/xla/stream_executor/device_memory.h"
+#include "tensorflow/compiler/xla/stream_executor/device_memory_allocator.h"
+#include "tensorflow/compiler/xla/stream_executor/event.h"
+#include "tensorflow/compiler/xla/stream_executor/host/host_platform_id.h"
+#include "tensorflow/compiler/xla/stream_executor/lib/statusor.h"
+#include "tensorflow/compiler/xla/stream_executor/stream.h"
 #include "tensorflow/compiler/xla/util.h"
 #include "tensorflow/compiler/xla/xla_data.pb.h"
 #include "tensorflow/core/platform/cpu_info.h"
 #include "tensorflow/core/platform/env.h"
 #include "tensorflow/core/platform/errors.h"
-#include "tensorflow/core/platform/fingerprint.h"
-#include "tensorflow/core/platform/mem.h"
 #include "tensorflow/core/platform/status.h"
 #include "tensorflow/core/platform/statusor.h"
 #include "tensorflow/core/profiler/lib/connected_traceme.h"
 #include "tensorflow/core/profiler/lib/traceme.h"
 #include "tensorflow/core/profiler/lib/traceme_encode.h"
-#include "tensorflow/stream_executor/device_memory.h"
-#include "tensorflow/stream_executor/device_memory_allocator.h"
-#include "tensorflow/stream_executor/event.h"
-#include "tensorflow/stream_executor/host/host_platform_id.h"
-#include "tensorflow/stream_executor/lib/statusor.h"
-#include "tensorflow/stream_executor/stream.h"
+#include "tensorflow/tsl/platform/fingerprint.h"
+#include "tensorflow/tsl/platform/mem.h"
 
 namespace xla {
 
@@ -195,11 +195,9 @@ class CpuAllocator : public tensorflow::Allocator {
   std::string Name() override { return "cpu"; }
 
   void* AllocateRaw(size_t alignment, size_t num_bytes) override {
-    return tensorflow::port::AlignedMalloc(num_bytes, alignment);
+    return tsl::port::AlignedMalloc(num_bytes, alignment);
   }
-  void DeallocateRaw(void* ptr) override {
-    return tensorflow::port::AlignedFree(ptr);
-  }
+  void DeallocateRaw(void* ptr) override { return tsl::port::AlignedFree(ptr); }
 };
 
 PjRtStreamExecutorClient::PjRtStreamExecutorClient(
@@ -209,7 +207,7 @@ PjRtStreamExecutorClient::PjRtStreamExecutorClient(
     std::unique_ptr<tensorflow::Allocator> host_memory_allocator,
     bool should_stage_host_to_device_transfers,
     std::unique_ptr<gpu::GpuExecutableRunOptions> gpu_run_options)
-    : platform_id_(tensorflow::Fingerprint64(platform_name)),
+    : platform_id_(tsl::Fingerprint64(platform_name)),
       platform_name_(std::move(platform_name)),
       client_(client),
       host_memory_allocator_(std::move(host_memory_allocator)),
@@ -533,7 +531,7 @@ void PjRtStreamExecutorBuffer::ScopedHold::Acquire(
     StatusOr<std::shared_ptr<TrackedDeviceBuffer>>&& buffer_or) {
   CHECK(!ok());
   if (buffer_or.ok()) {
-    buffer_ = buffer_or.ValueOrDie();
+    buffer_ = buffer_or.value();
     SetState(kValid);
   } else {
     status_ = buffer_or.status();
@@ -1343,7 +1341,7 @@ PjRtFuture<Status> PjRtStreamExecutorBuffer::ToLiteral(
       [promise](Status status) mutable { promise.Set(status); });
 
   auto usage_event = std::make_shared<BufferSequencingEvent>();
-  local_device->event_pool().ThenRecordEvent(stream, event_or.ValueOrDie());
+  local_device->event_pool().ThenRecordEvent(stream, event_or.value());
   usage_event->SetSequencingEvent(std::move(event_or).value(), stream);
   // When using the ComputeSynchronized allocation model, retain a reference to
   // the device_buffer until the copy completes, to ensure that the buffer isn't
@@ -1535,7 +1533,7 @@ StatusOr<std::unique_ptr<PjRtBuffer>> PjRtStreamExecutorBuffer::CopyToDevice(
     return buffer_and_event_or.status();
   }
 
-  auto& buffer_and_event = buffer_and_event_or.ValueOrDie();
+  auto& buffer_and_event = buffer_and_event_or.value();
   std::unique_ptr<PjRtBuffer>& buffer = buffer_and_event.first;
   std::shared_ptr<BufferSequencingEvent>& event = buffer_and_event.second;
 
@@ -2011,7 +2009,7 @@ StatusOr<ScopedShapedBuffer> PjRtStreamExecutorExecutable::EnqueueExecution(
   }
 
   if (device_state->allocation_model() == LocalDeviceState::kSynchronous) {
-    ExecutionOutput& execution_output = result_buffer_or_status.ValueOrDie();
+    ExecutionOutput& execution_output = result_buffer_or_status.value();
     // If we used a transient tuple for the arguments we donated its root table
     // buffer. In that case, and/or if we donated any input buffers that were
     // not aliased, the donated buffers are going to be passed back to us via

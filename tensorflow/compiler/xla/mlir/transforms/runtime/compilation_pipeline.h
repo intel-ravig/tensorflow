@@ -13,8 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef XLA_MLIR_TRANSFORMS_RUNTIME_COMPILATION_PIPELINE_H_
-#define XLA_MLIR_TRANSFORMS_RUNTIME_COMPILATION_PIPELINE_H_
+#ifndef TENSORFLOW_COMPILER_XLA_MLIR_TRANSFORMS_RUNTIME_COMPILATION_PIPELINE_H_
+#define TENSORFLOW_COMPILER_XLA_MLIR_TRANSFORMS_RUNTIME_COMPILATION_PIPELINE_H_
 
 #include <functional>
 
@@ -42,6 +42,7 @@ struct CompilationPipelineOptions {
   // structs) to the custom calls, and decode them into dialect-specific runtime
   // values in the custom call handlers (see custom_call_to_llvm.h for details).
   std::function<void(CustomCallArgEncodingSet&)> populate_arg_encodings;
+  std::function<void(CustomCallRetEncodingSet&)> populate_ret_encodings;
   std::function<void(CustomCallAttrEncodingSet&)> populate_attr_encodings;
 };
 
@@ -60,4 +61,4 @@ void CreateDefaultXlaRuntimeCompilationPipeline(
 }  // namespace runtime
 }  // namespace xla
 
-#endif  // XLA_MLIR_TRANSFORMS_RUNTIME_COMPILATION_PIPELINE_H_
+#endif  // TENSORFLOW_COMPILER_XLA_MLIR_TRANSFORMS_RUNTIME_COMPILATION_PIPELINE_H_

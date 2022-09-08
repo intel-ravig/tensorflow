@@ -1,3 +1,4 @@
+load("//tensorflow:tensorflow.bzl", "tf_cc_test")
 load("//tensorflow/core/platform:rules_cc.bzl", "cc_library")
 load("//tensorflow:tensorflow.bzl", "get_compatible_with_cloud")
 load("@llvm-project//mlir:tblgen.bzl", "gentbl_cc_library")
@@ -43,6 +44,7 @@ cc_library(
         "//tensorflow/compiler/xla/runtime:type_id",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:ArithmeticDialect",
+        "@llvm-project//mlir:AsyncDialect",
         "@llvm-project//mlir:ControlFlowDialect",
         "@llvm-project//mlir:ConversionPasses",
         "@llvm-project//mlir:FuncDialect",
@@ -66,6 +68,22 @@ cc_library(
         "//tensorflow/compiler/xla/mlir/ir/runtime:rt_ops",
         "@llvm-project//mlir:FuncDialect",
         "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:Transforms",
+    ],
+)
+
+tf_cc_test(
+    name = "calling_convention_test",
+    srcs = ["calling_convention_test.cc"],
+    compatible_with = get_compatible_with_cloud(),
+    deps = [
+        ":calling_convention",
+        "//tensorflow/compiler/xla/mlir/ir/runtime:rt_ops",
+        "//tensorflow/core:test",
+        "//tensorflow/core:test_main",
+        "@llvm-project//mlir:FuncDialect",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:MemRefDialect",
         "@llvm-project//mlir:Transforms",
     ],
 )
@@ -100,6 +118,7 @@ cc_library(
     hdrs = ["custom_call_encoding.h"],
     compatible_with = get_compatible_with_cloud(),
     deps = [
+        "//tensorflow/compiler/xla/mlir/ir/runtime:rt_ops",
         "//tensorflow/compiler/xla/runtime:custom_call",
         "//tensorflow/compiler/xla/runtime:type_id",
         "@llvm-project//llvm:Support",
@@ -127,6 +146,9 @@ cc_library(
         "//tensorflow/compiler/xla/runtime:errors",
         "//tensorflow/compiler/xla/runtime:executable",
         "//tensorflow/compiler/xla/runtime:symbolic_shape",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
         "@llvm-project//llvm:Core",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:ExecutionEngineUtils",
@@ -150,10 +172,14 @@ cc_library(
         "//tensorflow/compiler/xla/runtime:errors",
         "//tensorflow/compiler/xla/runtime:symbolic_shape",
         "//tensorflow/compiler/xla/runtime:types",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:ArithmeticDialect",
         "@llvm-project//mlir:FuncDialect",
         "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:Support",
         "@llvm-project//mlir:TensorDialect",
     ],
 )
@@ -167,8 +193,11 @@ cc_library(
         "//tensorflow/compiler/xla/mlir/ir/runtime:rt_ops",
         "//tensorflow/compiler/xla/runtime:errors",
         "//tensorflow/compiler/xla/runtime:types",
-        "@llvm-project//llvm:Support",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings:str_format",
         "@llvm-project//mlir:AsyncDialect",
         "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:Support",
     ],
 )

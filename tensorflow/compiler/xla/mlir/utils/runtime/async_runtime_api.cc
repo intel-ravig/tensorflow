@@ -20,9 +20,11 @@ limitations under the License.
 #include <cstddef>
 #include <iostream>
 #include <ostream>
+#include <string_view>
 #include <thread>  // NOLINT TODO(ezhulenev): Remove this header.
 #include <type_traits>
 
+#include "absl/base/dynamic_annotations.h"
 #include "mlir/ExecutionEngine/AsyncRuntime.h"  // from @llvm-project
 #include "tensorflow/compiler/xla/runtime/async_runtime.h"
 #include "tfrt/host_context/async_value.h"  // from @tf_runtime
@@ -92,7 +94,7 @@ llvm::orc::SymbolMap AsyncRuntimeApiSymbolMap(
     llvm::orc::MangleAndInterner mangle) {
   llvm::orc::SymbolMap symbol_map;
 
-  auto bind = [&](llvm::StringRef name, auto symbol_ptr) {
+  auto bind = [&](std::string_view name, auto symbol_ptr) {
     symbol_map[mangle(name)] = llvm::JITEvaluatedSymbol(
         llvm::pointerToJITTargetAddress(symbol_ptr), llvm::JITSymbolFlags());
   };
@@ -163,7 +165,7 @@ llvm::orc::SymbolMap AsyncRuntimeMemoryAllocationSymbolMap(
     llvm::orc::MangleAndInterner mangle) {
   llvm::orc::SymbolMap symbol_map;
 
-  auto bind = [&](llvm::StringRef name, auto symbol_ptr) {
+  auto bind = [&](std::string_view name, auto symbol_ptr) {
     symbol_map[mangle(name)] = llvm::JITEvaluatedSymbol(
         llvm::pointerToJITTargetAddress(symbol_ptr), llvm::JITSymbolFlags());
   };

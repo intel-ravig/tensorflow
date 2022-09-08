@@ -31,10 +31,10 @@ limitations under the License.
 #include "tensorflow/core/profiler/convert/op_stats_to_tf_stats.h"
 #include "tensorflow/core/profiler/convert/repository.h"
 #include "tensorflow/core/profiler/convert/tool_options.h"
-#include "tensorflow/core/profiler/convert/xplane_to_hlo.h"
 #include "tensorflow/core/profiler/convert/xplane_to_memory_profile.h"
 #include "tensorflow/core/profiler/convert/xplane_to_op_stats.h"
 #include "tensorflow/core/profiler/convert/xplane_to_tf_data_stats.h"
+#include "tensorflow/core/profiler/convert/xplane_to_tool_names.h"
 #include "tensorflow/core/profiler/convert/xplane_to_trace_events.h"
 #include "tensorflow/core/profiler/protobuf/hardware_types.pb.h"
 #include "tensorflow/core/profiler/protobuf/input_pipeline.pb.h"
@@ -228,17 +228,12 @@ StatusOr<std::string> ConvertMultiXSpacesToToolData(
     return ConvertMultiXSpacesToPodViewer(session_snapshot);
   } else if (tool_name == "tf_data_bottleneck_analysis") {
     return ConvertMultiXSpacesToTfDataBottleneckAnalysis(session_snapshot);
-  } else if (tool_name == "hlo_proto") {
-    // <hlo_proto> is a special tool name to generate HLO proto files from
-    // XSpace and store them in profile repository, this method does not return
-    // actual tool data.
-    TF_RETURN_IF_ERROR(
-        GetHloProtoFromMultiXSpaceAndSaveToFile(session_snapshot));
-    return std::string();
   } else if (tool_name == "op_profile") {
     return ConvertMultiXSpacesToOpProfileViewer(session_snapshot);
   } else if (tool_name == "memory_viewer" || tool_name == "graph_viewer") {
     return ConvertHloProtoToToolData(session_snapshot, tool_name, options);
+  } else if (tool_name == "tool_names") {
+    return GetAvailableToolNames(session_snapshot);
   } else {
     return errors::InvalidArgument(
         "Can not find tool: ", tool_name,

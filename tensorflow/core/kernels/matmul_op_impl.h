@@ -50,9 +50,9 @@ limitations under the License.
 #endif  // GOOGLE_CUDA || TENSORFLOW_USE_ROCM
 #if GOOGLE_CUDA
 #include "third_party/gpus/cuda/include/cuda.h"
+#include "tensorflow/compiler/xla/stream_executor/cuda/cuda_blas_lt.h"
+#include "tensorflow/compiler/xla/stream_executor/host_or_device_scalar.h"
 #include "tensorflow/core/kernels/matmul_util.h"
-#include "tensorflow/stream_executor/cuda/cuda_blas_lt.h"
-#include "tensorflow/stream_executor/host_or_device_scalar.h"
 #endif  // GOOGLE_CUDA
 
 namespace tensorflow {
@@ -337,11 +337,13 @@ class BlasScratchAllocator : public se::ScratchAllocator {
     // Hold the reference of the allocated tensors until the end of the
     // allocator.
     allocated_tensors_.push_back(temporary_memory);
+    total_byte_size_ += byte_size;
     return se::port::StatusOr<DeviceMemoryBytes>(
         DeviceMemoryBytes::MakeFromByteSize(
             temporary_memory.flat<uint8>().data(),
             temporary_memory.flat<uint8>().size()));
   }
+  int64 TotalByteSize() { return total_byte_size_; }
 
  private:
   int64_t memory_limit_;

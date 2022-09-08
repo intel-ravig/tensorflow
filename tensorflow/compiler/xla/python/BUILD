@@ -16,7 +16,7 @@ load("//tensorflow:tensorflow.bzl", "pybind_extension")
 load("//tensorflow:tensorflow.bzl", "pytype_library")
 
 package(
-    default_visibility = ["//tensorflow:internal"],
+    default_visibility = [":friends"],
     licenses = ["notice"],
 )
 
@@ -172,6 +172,7 @@ cc_library(
         "//tensorflow/compiler/xla/pjrt:pjrt_client",
         "//tensorflow/core:lib",
         "//tensorflow/python:bfloat16_lib",
+        "//tensorflow/tsl/platform:logging",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:inlined_vector",
         "@pybind11",
@@ -229,6 +230,7 @@ cc_library(
         ":exceptions",
         ":python_ref_manager",
         "//tensorflow/core:lib",
+        "//tensorflow/tsl/platform:logging",
         "@com_google_absl//absl/container:inlined_vector",
         "@com_google_absl//absl/hash",
         "@com_google_absl//absl/strings",
@@ -319,6 +321,7 @@ cc_library(
         "//tensorflow/core/platform:statusor",
         "//tensorflow/core/profiler/lib:traceme",
         "//tensorflow/python/lib/core:numpy_lib",
+        "//tensorflow/tsl/platform:fingerprint",
     ] + if_cuda([
         "@local_config_cuda//cuda:cuda_headers",
     ]),
@@ -457,8 +460,8 @@ cc_library(
         ":types",
         "//tensorflow/compiler/xla:xla_data_proto_cc",
         "//tensorflow/compiler/xla/pjrt:pjrt_client",
-        "//tensorflow/core/platform:logging",
         "//tensorflow/core/profiler/lib:traceme",
+        "//tensorflow/tsl/platform:logging",
         "@com_google_absl//absl/hash",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:str_format",
@@ -528,7 +531,7 @@ cc_library(
     visibility = [":friends"],
     deps = [
         ":exceptions",
-        "//tensorflow/core/platform:logging",
+        "//tensorflow/tsl/platform:logging",
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:inlined_vector",
@@ -556,6 +559,7 @@ cc_library(
         "//tensorflow/compiler/xla:status",
         "//tensorflow/compiler/xla/client:xla_computation",
         "//tensorflow/compiler/xla/mlir_hlo",
+        "//tensorflow/compiler/xla/mlir_hlo/stablehlo:chlo_ops",
         "//tensorflow/compiler/xla/pjrt:mlir_to_hlo",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:FuncDialect",
@@ -676,6 +680,7 @@ cc_library(
         "//tensorflow/compiler/xla/service:name_uniquer",
         "//tensorflow/compiler/xla/service:platform_util",
         "//tensorflow/core:lib",
+        "//tensorflow/tsl/platform:logging",
         "@com_google_absl//absl/hash",
         "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/types:span",
@@ -768,6 +773,8 @@ pybind_extension(
                "//tensorflow/compiler/xla/pjrt/distributed:client",
                "//tensorflow/compiler/xla/pjrt/distributed:service",
                "//tensorflow/core:lib",
+               "//tensorflow/tsl/platform:logging",
+               "//tensorflow/compiler/xla/pjrt:pjrt_c_api_client",
                # Do NOT remove this dependency. The XLA Python extension must not
                # depend on any part of TensorFlow at runtime, **including**
                # libtensorflow_framework.so. The XLA module is deployed self-contained

@@ -13,17 +13,26 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef XLA_RUNTIME_TYPE_ID_H_
-#define XLA_RUNTIME_TYPE_ID_H_
+#ifndef TENSORFLOW_COMPILER_XLA_RUNTIME_TYPE_ID_H_
+#define TENSORFLOW_COMPILER_XLA_RUNTIME_TYPE_ID_H_
 
 #include <atomic>
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <string>
+#include <string_view>
 
-#include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/StringRef.h"
+#include "absl/container/flat_hash_map.h"
 #include "mlir/Support/TypeID.h"  // from @llvm-project
+
+namespace mlir {
+// Allow TypeID to be used as a key in ABSL map containers.
+template <typename H>
+H AbslHashValue(H h, const TypeID& type_id) {
+  return H::combine(std::move(h), type_id.getAsOpaquePointer());
+}
+}  // namespace mlir
 
 namespace xla {
 namespace runtime {
@@ -39,27 +48,24 @@ using ::mlir::TypeID;  // NOLINT
 // external symbols corresponding to type ids in compiled XLA executables.
 class TypeIDNameRegistry {
  public:
-  using RegistrationFn = std::function<void(TypeIDNameRegistry&)>;
-
   TypeIDNameRegistry() = default;
   ~TypeIDNameRegistry() = default;
 
   template <typename T>
-  void Register(llvm::StringRef type_name) {
-    auto type_id = TypeID::get<T>();
-    auto inserted = type_id_name_map_.try_emplace(type_id, type_name);
+  void Register(std::string_view type_name) {
+    auto inserted = type_id_name_map_.try_emplace(TypeID::get<T>(), type_name);
     assert(inserted.second && "duplicate typeid name registration");
     (void)inserted;
   }
 
-  llvm::StringRef FindTypeIDSymbolName(TypeID type_id);
+  std::string_view FindTypeIDSymbolName(TypeID type_id);
 
-  void ForEach(std::function<void(llvm::StringRef, TypeID)> f) const {
+  void ForEach(std::function<void(std::string_view, TypeID)> f) const {
     for (auto& kv : type_id_name_map_) f(kv.second, kv.first);
   }
 
  private:
-  llvm::DenseMap<TypeID, llvm::StringRef> type_id_name_map_;
+  absl::flat_hash_map<TypeID, std::string> type_id_name_map_;
 };
 
 //===----------------------------------------------------------------------===//
@@ -163,4 +169,4 @@ size_t DenseTypeIdResolver<IdSet, T>::get() {
   } /* namespace runtime */                                                   \
   } /* namespace xla */
 
-#endif  // XLA_RUNTIME_TYPE_ID_H_
+#endif  // TENSORFLOW_COMPILER_XLA_RUNTIME_TYPE_ID_H_

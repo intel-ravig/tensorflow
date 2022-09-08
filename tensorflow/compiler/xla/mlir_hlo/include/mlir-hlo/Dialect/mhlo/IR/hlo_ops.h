@@ -18,7 +18,6 @@ limitations under the License.
 #ifndef MLIR_HLO_DIALECT_MHLO_IR_HLO_OPS_H
 #define MLIR_HLO_DIALECT_MHLO_IR_HLO_OPS_H
 
-#include "dialect/Base.h"
 #include "llvm/ADT/StringRef.h"
 #include "mlir/Dialect/Quant/QuantTypes.h"
 #include "mlir/Dialect/Shape/IR/Shape.h"
@@ -35,11 +34,14 @@ limitations under the License.
 #include "mlir/IR/Types.h"
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
+#include "stablehlo/dialect/Base.h"
 
 // Include order below matters.
 #include "mlir-hlo/Dialect/mhlo/IR/hlo_ops_enums.h.inc"
 #define GET_ATTRDEF_CLASSES
 #include "mlir-hlo/Dialect/mhlo/IR/hlo_ops_attrs.h.inc"
+#define GET_TYPEDEF_CLASSES
+#include "mlir-hlo/Dialect/mhlo/IR/hlo_ops_typedefs.h.inc"
 
 namespace mlir {
 class OpBuilder;

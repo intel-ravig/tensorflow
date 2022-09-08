@@ -58,7 +58,7 @@ limitations under the License.
 #include "tensorflow/core/lib/gtl/map_util.h"
 #include "tensorflow/core/platform/errors.h"
 #include "tensorflow/core/platform/human_readable_json.h"
-#include "tensorflow/core/platform/logging.h"
+#include "tensorflow/tsl/platform/logging.h"
 
 namespace xla {
 
@@ -1968,6 +1968,13 @@ bool HloInstruction::HasSideEffect() const {
       std::move(user_side_metadata));
 }
 
+/* static */ bool HloInstruction::IsThreadIncluded(
+    absl::string_view execution_thread,
+    const absl::flat_hash_set<absl::string_view>& execution_threads_set) {
+  return execution_threads_set.empty() ||
+         execution_threads_set.contains(execution_thread);
+}
+
 std::unique_ptr<HloInstruction> HloInstruction::CloneWithNewOperands(
     const Shape& shape, absl::Span<HloInstruction* const> new_operands,
     HloCloneContext* context) const {
@@ -3420,6 +3427,12 @@ bool HloInstruction::IsCustomCall(absl::string_view target) const {
   return opcode() == HloOpcode::kCustomCall && custom_call_target() == target;
 }
 
+bool HloInstruction::IsCustomCall(
+    absl::Span<const absl::string_view> targets) const {
+  return opcode() == HloOpcode::kCustomCall &&
+         absl::c_linear_search(targets, custom_call_target());
+}
+
 bool HloInstruction::IsInputFusion() const {
   return opcode() == HloOpcode::kFusion && fusion_kind() == FusionKind::kInput;
 }
@@ -4326,7 +4339,7 @@ Status HloInstruction::GetBackendConfigInternal(
 
 const std::string& HloInstruction::BackendConfigRep::GetRawString() const {
   if (proto_ && raw_string_.empty()) {
-    raw_string_ = BackendConfigToRawString(*proto_).ValueOrDie();
+    raw_string_ = BackendConfigToRawString(*proto_).value();
   }
   return raw_string_;
 }
@@ -4902,6 +4915,11 @@ const TriangularSolveOptions& HloInstruction::triangular_solve_options() const {
 
 const CholeskyOptions& HloInstruction::cholesky_options() const {
   return Cast<HloCholeskyInstruction>(this)->cholesky_options();
+}
+
+const std::vector<std::pair<ShapeIndex, std::pair<int64_t, ShapeIndex>>>&
+HloInstruction::custom_call_output_operand_aliasing() const {
+  return Cast<HloCustomCallInstruction>(this)->output_to_operand_aliasing();
 }
 
 }  // namespace xla

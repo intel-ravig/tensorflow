@@ -4,8 +4,8 @@ load("//third_party:repo.bzl", "tf_http_archive")
 
 def repo(name):
     """Imports LLVM."""
-    LLVM_COMMIT = "de54bcc54c6147d90f11f70b6b53f84e62b1e74a"
-    LLVM_SHA256 = "2314a9c2958402ed282333418e9dba524cccfa574a0ec8d652b76fcf5b568ed4"
+    LLVM_COMMIT = "aa484c90cf5902042cec0f6a4f3bf2a460eea307"
+    LLVM_SHA256 = "915d1f4a47c1fe91082c50eeff05b208c61cf33c983d34a132872101bebeb859"
 
     tf_http_archive(
         name = name,
@@ -20,6 +20,7 @@ def repo(name):
             "//third_party/llvm:infer_type.patch",  # TODO(b/231285230): remove once resolved
             "//third_party/llvm:build.patch",
             "//third_party/llvm:toolchains.patch",
+            "//third_party/llvm:temporary.patch",  # Cherry-picks and temporary reverts. Do not remove even if temporary.patch is empty.
         ],
         link_files = {"//third_party/llvm:run_lit.sh": "mlir/run_lit.sh"},
     )

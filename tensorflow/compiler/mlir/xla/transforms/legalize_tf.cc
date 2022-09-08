@@ -55,10 +55,10 @@ limitations under the License.
 #include "tensorflow/compiler/xla/client/lib/conv_grad_size_util.h"
 #include "tensorflow/compiler/xla/client/padding.h"
 #include "tensorflow/compiler/xla/client/sharding_builder.h"
-#include "tensorflow/compiler/xla/mlir_hlo/include/mlir-hlo/Dialect/mhlo/IR/chlo_ops.h"
 #include "tensorflow/compiler/xla/mlir_hlo/include/mlir-hlo/Dialect/mhlo/IR/hlo_ops.h"
 #include "tensorflow/compiler/xla/mlir_hlo/include/mlir-hlo/utils/convert_op_folder.h"
 #include "tensorflow/compiler/xla/mlir_hlo/include/mlir-hlo/utils/hlo_utils.h"
+#include "tensorflow/compiler/xla/mlir_hlo/stablehlo/stablehlo/dialect/ChloOps.h"
 #include "tensorflow/compiler/xla/xla_data.pb.h"
 #include "tensorflow/core/framework/kernel_shape_util.h"
 #include "tensorflow/core/framework/rng_alg.h"
@@ -2832,7 +2832,7 @@ class ConvertAvgPoolGradOp : public OpRewritePattern<OpTy> {
         return failure();
       }
       ::xla::SpatialDimensionOutputSizeAndPadding &conv_grad_spatial_dim =
-          status.ValueOrDie();
+          status.value();
       // Subtract the original exterior padding since it doesn't contribute to
       // the gradient. Note that we save one `PadOp` and some unnecessary kernel
       // computations, compared to the `xla::AvgPoolGrad` implementation, by
